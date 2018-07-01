@@ -57,7 +57,7 @@ typedef void (*component_delete_func)(Component*);
 			&MyComponent_Delete,
 			sizeof(struct MyComponent));
 */
-int ECS_ComponentRegisterType(
+bool ECS_ComponentRegisterType(
 	ECS *ecs,
 	const char *type,
 	component_create_func cr_func,

@@ -1,6 +1,11 @@
 #include <stdio.h>
 #include "ecs.h"
 
+struct TestComponent {
+	const char *string;
+};
+
+
 int main (int argc, const char **argv) {
 
 	const char *str = "This is a test.";
@@ -10,7 +15,15 @@ int main (int argc, const char **argv) {
 	
 	ECS *ecs = ECS_New();
 	
+	bool res = ECS_ComponentRegisterType(
+		ecs,
+		"TestComponent",
+		NULL, NULL,
+		sizeof(struct TestComponent)
+	);
+		
 	Entity *entity = ECS_EntityNew(ecs);
+	printf("%p.\n", entity);
 	ECS_AddEntity(ecs, entity);
 	
 	printf("Part 1/2 done.\n");

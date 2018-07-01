@@ -1,3 +1,5 @@
+// entity.h
+
 #ifndef ECS_ENTITY_H
 #define ECS_ENTITY_H
 
@@ -5,7 +7,7 @@
 
 struct Entity {
 	hash_t id;
-	hashtable_t components;
+	hashtable_t *components;
 	ECS *ecs;
 };
 

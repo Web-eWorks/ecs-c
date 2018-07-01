@@ -1,3 +1,5 @@
+// ecs.h
+
 /*
 	Most interaction with the 'global' portion of the ECS will be taking place
 	using these functions.
@@ -5,6 +7,8 @@
 
 #ifndef ECS_MAIN_H
 #define ECS_MAIN_H
+
+#include <stdbool.h>
 
 /*
 	Forward declarations.
