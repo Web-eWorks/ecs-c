@@ -5,12 +5,15 @@ ECS* ECS_New()
 {
 	ECS *ecs = malloc(sizeof(ECS));
 
-	ecs->components = ht_alloc(64, sizeof(ComponentArray));
+	ecs->components = ht_alloc(64, sizeof(ComponentInfo));
 	ecs->cm_types = ht_alloc(64, sizeof(ComponentType));
+
 	// TODO
 	ecs->systems = ht_alloc(64, sizeof(void*));
 	ecs->entities = ht_alloc(256, sizeof(void*));
-	ecs->_last_entity = 0;
+	ecs->_last_entity = 1;
+	ecs->_last_component = 1;
+	ecs->_last_system = 1;
 
 	// TODO: initialization
 	return ecs;

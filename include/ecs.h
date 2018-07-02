@@ -25,6 +25,7 @@ typedef struct SystemInfo SystemInfo;
 typedef struct ECS ECS;
 
 #include "hash.h"
+#include "dynarray.h"
 #include "component.h"
 #include "entity.h"
 #include "system.h"

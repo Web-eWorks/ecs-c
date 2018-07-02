@@ -3,9 +3,9 @@
 #include "component.h"
 #include "manager.h"
 
-Component* ECS_ComponentNew(ECS *ecs, const char *type, ComponentInfo *info)
+ComponentInfo* ECS_ComponentNew(ECS *ecs, const char *type)
 {
-	assert(ecs && type && info);
+	assert(ecs && type);
 	
 	ComponentType* comp_type = Manager_GetComponentType(ecs, type);
 	if (comp_type == NULL) {
@@ -13,14 +13,11 @@ Component* ECS_ComponentNew(ECS *ecs, const char *type, ComponentInfo *info)
 		return NULL;
 	}
 	
-	Component* comp = Manager_CreateComponent(ecs, comp_type);
+	ComponentInfo *comp = Manager_CreateComponent(ecs, comp_type);
 	if (comp == NULL) {
 		fprintf(stderr, "Error: could not create component of type %s.\n", type);
 		return NULL;
 	}
-	
-	info->type = comp_type->type_hash;
-	info->component = comp;
 	
 	return comp;
 }
@@ -34,7 +31,7 @@ void ECS_ComponentDelete(ECS *ecs, ComponentInfo *info)
 	}
 	
 	if (info->component != NULL) {
-		Manager_DeleteComponent(ecs, info->component);
+		Manager_DeleteComponent(ecs, info);
 	}
 	
 	free(info);

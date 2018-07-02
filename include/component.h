@@ -8,6 +8,8 @@
 /*
 	A component is an arbitrary structure of a certain type. The type of a
 	structure is stored as a hash id, referencing a ComponentType entry.
+
+	Two components must not share the same ID.
 */
 struct ComponentInfo {
 	hash_t id;
@@ -20,7 +22,7 @@ struct ComponentInfo {
 	Initializes a new component, sets up the ComponentInfo, and returns a
 	pointer to the new component.
 */
-Component* ECS_ComponentNew(ECS *ecs, const char *type, ComponentInfo *info);
+ComponentInfo* ECS_ComponentNew(ECS *ecs, const char *type);
 
 /*
 	Destroys a component, removing it from the owning Entity if present, and
@@ -52,10 +54,15 @@ typedef void (*component_delete_func)(Component*);
 	Example usage:
 	
 		bool ok = ECS_ComponentRegisterType(
+			ecs,
 			"MyComponent",
 			&MyComponent_New,
 			&MyComponent_Delete,
 			sizeof(struct MyComponent));
+			
+		//alternatively:
+		bool ok = REGISTER_COMPONENT(ecs, MyComponent)
+
 */
 bool ECS_ComponentRegisterType(
 	ECS *ecs,
@@ -63,5 +70,39 @@ bool ECS_ComponentRegisterType(
 	component_create_func cr_func,
 	component_delete_func dl_func,
 	size_t size);
+
+/*
+	A set of convenience macros for working with components.
+	
+	To declare a component, define a struct and call COMPONENT, passing the
+	type. This can be done in any order.
+		
+		COMPONENT(Name)
+		struct Name {};
+		
+	Then, you need to define the allocate and delete functions for the
+	component.
+	
+		void Name_new(Name *comp);
+		void Name_free(Name *comp);
+	
+	These are declared as static inline void, but the definition only needs
+	void.
+	
+	Then, in your initialization, instead of ECS_ComponentRegisterType, call:
+	
+		bool res = REGISTER_COMPONENT(ecs, Name);
+	
+	And you're done!
+*/
+#define COMPONENT(T) \
+	typedef struct T T; \
+	static inline void T##_new(T *comp); \
+	static void T##_cr(Component *p) { T##_new((T *)p); } \
+	static inline void T##_free(T *comp); \
+	static void T##_dl(Component *p) { T##_free((T *)p); } \
+
+#define REGISTER_COMPONENT(ECS, T) \
+	(ECS_ComponentRegisterType(ECS, #T, T##_cr, T##_dl, sizeof(T)))
 
 #endif

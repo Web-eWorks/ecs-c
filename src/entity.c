@@ -30,6 +30,9 @@ hash_t ECS_EntityAddComponent(Entity *entity, ComponentInfo *comp)
 		fprintf(stderr, "Error: component %x is already attached to entity %x.\n",
 			comp->id, comp->owner);
 	}
+	
+	comp->owner = entity;
+	ht_insert(entity->components, comp->id, comp);
 
 	// TODO
 	return 0;
