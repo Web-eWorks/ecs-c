@@ -33,8 +33,8 @@ struct SystemInfo {
     system_update_func up_func;
     system_collection_func coll_func;
     system_event_func ev_func;
+	void *udata;
     EventQueue *ev_queue;
-    void *udata;
 };
 
 typedef struct {

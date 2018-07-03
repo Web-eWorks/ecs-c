@@ -16,7 +16,7 @@ hash_t hash_string(const char *string)
 
 hash_t hash_bytes(const char *string, size_t len)
 {
-	return crc32(crc32(0L, Z_NULL, 0), string, len);
+	return crc32(crc32(0L, Z_NULL, 0), (unsigned char *)string, len);
 }
 
 #define LOAD_MAX 0.8f
@@ -115,7 +115,7 @@ void ht_free(hashtable_t *ht)
 
 // redestribute all items in the hash table according to their new indexes
 static void rehash(hashtable_t *ht) {
-
+	// TODO: rehash
 }
 
 void* ht_insert(hashtable_t *ht, hash_t hash, void *data)
@@ -231,7 +231,7 @@ hash_t ht_next(hashtable_t *ht, hash_t hash)
 		// loop through the hashtable until we find a non-null element
 		// or get back to the start
 		do {
-			idx = idx++ % ht->size;
+			idx = (idx + 1) % ht->size;
 			if (idx == start) return 0;
 		} while(get_bucket_size(ht, idx) == 0);
 

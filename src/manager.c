@@ -148,3 +148,33 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity)
 	dyn_free(&entity->components);
 	ht_delete(ecs->entities, entity->id);
 }
+
+/* -------------------------------------------------------------------------- */
+
+bool Manager_RegisterSystem(ECS *ecs, SystemInfo *info)
+{
+	assert(ecs && ecs->systems && info);
+
+	SystemInfo *_info = ht_insert(ecs->systems, hash_string(info->name), info);
+	return _info ? true : false;
+}
+
+SystemInfo* Manager_GetSystem(ECS *ecs, const char *name)
+{
+	assert(ecs && ecs->systems && name);
+
+	return ht_get(ecs->systems, hash_string(name));
+}
+
+void Manager_UnregisterSystem(ECS *ecs, const char *name)
+{
+	assert(ecs && ecs->systems && name);
+
+	SystemInfo *info = ht_get(ecs->systems, hash_string(name));
+	if (!info) return;
+
+	EventQueue_Free(info->ev_queue);
+	free((char *)info->name);
+
+	ht_delete(ecs->systems, hash_string(name));
+}

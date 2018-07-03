@@ -1,36 +1,21 @@
-SRCS = $(wildcard src/*.c)
-OBJS = $(SRCS:src/%.c=obj/%.o)
-HEADER = include/ecs.h
-OUT = main
+export CFLAGS += -std=c99
+export LDFLAGS +=
+MAKE += --no-print-directory
 
-CFLAGS += -Iinclude/ -Isrc/
-LDFLAGS += -lz
+debug: export CFLAGS += -g -Wall -Wno-unused-function
+release: export CFLAGS += -O3
 
-debug: CFLAGS += -g
-release: CFLAGS += -O3
+.PHONY: debug release test clean
 
-.PHONY: default test release debug clean
-
-default: debug
-
-# Rules to trigger recompilation when a source's header has changed.
-%.h: ;
-
-# Generate object files from each source file
-obj/%.o: src/%.c include/%.h src/%.h $(HEADER)
-	$(CC) -c -o $@ $< $(CFLAGS)
-
-$(OUT): $(OBJS)
-	$(CC) -o $@ $^ $(LDFLAGS)
-	@ echo "Compilation successful."
-
-release: $(OUT)
-debug: $(OUT)
+debug release:
+	@ $(MAKE) -f src/Makefile $@
+	@ $(MAKE) -f test/Makefile $@
+	@ echo "Finished $@ compilation."
 
 test: debug
 	@ ./main
 	@ echo "Tests finished successfully."
 
 clean:
-	@ rm -rf $(OBJS) $(OUT)
-	@ echo "Cleaned."
+	@ $(MAKE) -f src/Makefile clean
+	@ $(MAKE) -f test/Makefile clean

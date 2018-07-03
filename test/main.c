@@ -2,20 +2,43 @@
 #include <stdio.h>
 #include <string.h>
 #include "ecs.h"
-
-COMPONENT(TestComponent)
-struct TestComponent {
-	char *string;
-};
+#include "testcomponent.h"
+#include "testsystem.h"
 
 COMPONENT_IMPL(TestComponent)
 void TestComponent_new(TestComponent *comp) {
 	comp->string = malloc(15);
 	if (comp->string) strcpy(comp->string, "This is a test.");
 }
-
 void TestComponent_free(TestComponent *comp) {
 	if (comp->string) free(comp->string);
+}
+const char* TestComponent_GetString(TestComponent *comp)
+{
+	if (!comp || !comp->string) return NULL;
+	return comp->string;
+}
+
+const char* collection[1] = {
+	"TestComponent"
+};
+
+SYSTEM_IMPL(TestSystem)
+void TestSystem_update(Component **c, TestSystem *system)
+{
+	// Since we returned "TestComponent" as element 0 in TestSystem_collection,
+	// c[0] will _always_ be a TestComponent pointer.
+	TestComponent *comp = c[0];
+	puts(TestComponent_GetString(comp));
+}
+const char** TestSystem_collection(int *size, TestSystem *system)
+{
+	*size = 1;
+	return collection;
+}
+bool TestSystem_event(Event *event, TestSystem *system)
+{
+	return false;
 }
 
 int main (int argc, const char **argv) {

@@ -37,8 +37,8 @@ bool ECS_SystemRegister(
     ECS *ecs,
     const char *name,
     system_update_func update,
-    system_event_func event,
     system_collection_func collection,
+    system_event_func event,
     void *udata
 );
 
@@ -65,7 +65,7 @@ void ECS_SystemUnregister(ECS *ecs, const char *name);
     static inline const char** T##_collection (int *s, T *p); \
     static const char** T##_cf(int *s, void *p) { return T##_collection(s, (T *)p); }; \
     static inline bool T##_event(Event *e, T *p); \
-    static bool T##_ef(Event *e, void *p) { return T##event(e, (T *)p); };
+    static bool T##_ef(Event *e, void *p) { return T##_event(e, (T *)p); };
 
 #define REGISTER_SYSTEM(ECS, T, INST) \
     ECS_SystemRegister(ECS, #T, T##_uf, T##_cf, T##_ef, INST)

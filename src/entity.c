@@ -37,7 +37,7 @@ bool ECS_EntityAddComponent(Entity *entity, ComponentInfo *comp)
 
 	if (comp->owner != NULL) {
 		fprintf(stderr, "Error: component %x is already attached to entity %x.\n",
-			comp->id, comp->owner);
+			comp->id, comp->owner->id);
 		return false;
 	}
 

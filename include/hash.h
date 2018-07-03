@@ -17,8 +17,6 @@ typedef struct {
 hash_t hash_string(const char *str);
 hash_t hash_bytes(const char *bytes, const size_t len);
 
-// TODO: hashtable functions
-
 /*
 	Allocate and delete a hashtable.
 	The initial count of slots should be a power of two, and defaults to 16 if
@@ -30,7 +28,7 @@ void ht_free(hashtable_t* ht);
 /*
 	Create / insert data into the hashtable at a certain index.
 	If data is NULL, zero-initializes the allocated memory.
-	
+
 	Returns a pointer to the allocated entry.
 */
 void* ht_insert(hashtable_t *ht, hash_t hash, void *data);
@@ -50,5 +48,7 @@ hash_t ht_next(hashtable_t *ht, hash_t hash);
 	Remove an entry from the hashtable. Frees the entry's memory.
 */
 void ht_delete(hashtable_t *ht, hash_t hash);
+
+#define HT_FOR(HT, START) for (hash_t idx = START; (idx = ht_next(HT, idx)) != 0;)
 
 #endif
