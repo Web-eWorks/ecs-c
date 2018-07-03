@@ -6,35 +6,50 @@
 ComponentInfo* ECS_ComponentNew(ECS *ecs, const char *type)
 {
 	assert(ecs && type);
-	
+
 	ComponentType* comp_type = Manager_GetComponentType(ecs, type);
 	if (comp_type == NULL) {
 		fprintf(stderr, "Error: no such component type %s.\n", type);
 		return NULL;
 	}
-	
+
 	ComponentInfo *comp = Manager_CreateComponent(ecs, comp_type);
 	if (comp == NULL) {
 		fprintf(stderr, "Error: could not create component of type %s.\n", type);
 		return NULL;
 	}
-	
+
 	return comp;
+}
+
+ComponentInfo* ECS_ComponentGet(ECS *ecs, hash_t id)
+{
+	assert(ecs && id);
+
+	return Manager_GetComponent(ecs, id);
 }
 
 void ECS_ComponentDelete(ECS *ecs, ComponentInfo *info)
 {
 	assert(ecs && info);
-	
+
 	if (info->owner != NULL) {
 		ECS_EntityRemoveComponent(info->owner, info->id);
 	}
-	
-	if (info->component != NULL) {
-		Manager_DeleteComponent(ecs, info);
-	}
-	
-	free(info);
+
+	Manager_DeleteComponent(ecs, info);
+}
+
+const char* ECS_ComponentToString(ECS *ecs, ComponentInfo *comp)
+{
+	assert(ecs && ecs->cm_types && comp);
+	ComponentType *type = ht_get(ecs->cm_types, comp->type);
+	if (!type) return NULL;
+
+	char *str = malloc(strlen(type->type) + 12);
+	sprintf(str, "%s (%08x)", type->type, comp->id);
+
+	return str;
 }
 
 bool ECS_ComponentRegisterType(
@@ -45,7 +60,7 @@ bool ECS_ComponentRegisterType(
 	size_t type_size)
 {
 	assert(ecs && type);
-	
+
 	if (strlen(type) == 0) {
 		printf("Error: cannot register component types with empty names!\n");
 		return false;
@@ -57,13 +72,13 @@ bool ECS_ComponentRegisterType(
 		type_size,
 		hash_string(type)
 	};
-	
+
 	strcpy((char *)c_type.type, type);
-	
+
 	if (!Manager_RegisterComponentType(ecs, &c_type)) {
 		printf("Error: could not register component type %s.\n", type);
 		return false;
 	}
-	
+
 	return true;
 }

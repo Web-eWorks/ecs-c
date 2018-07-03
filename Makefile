@@ -3,12 +3,15 @@ OBJS = $(SRCS:src/%.c=obj/%.o)
 HEADER = include/ecs.h
 OUT = main
 
-CFLAGS += -O1 -Iinclude/ -Isrc/
+CFLAGS += -Iinclude/ -Isrc/
 LDFLAGS += -lz
 
-.PHONY: default test clean
+debug: CFLAGS += -g
+release: CFLAGS += -O3
 
-default: $(OUT)
+.PHONY: default test release debug clean
+
+default: debug
 
 # Rules to trigger recompilation when a source's header has changed.
 %.h: ;
@@ -21,7 +24,10 @@ $(OUT): $(OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS)
 	@ echo "Compilation successful."
 
-test: $(OUT)
+release: $(OUT)
+debug: $(OUT)
+
+test: debug
 	@ ./main
 	@ echo "Tests finished successfully."
 

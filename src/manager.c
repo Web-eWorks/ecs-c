@@ -4,7 +4,7 @@
 ComponentType* Manager_GetComponentType(ECS *ecs, const char *type)
 {
 	assert(ecs && type);
-	
+
 	hash_t type_hash = hash_string(type);
 	return ht_get(ecs->cm_types, type_hash);
 }
@@ -22,57 +22,64 @@ bool Manager_RegisterComponentType(ECS *ecs, ComponentType *type)
 		ht_delete(ecs->cm_types, type->type_hash);
 		return false;
 	}
-	
+
 	return true;
 }
 
 ComponentInfo* Manager_CreateComponent(ECS *ecs, ComponentType *type)
 {
 	assert(ecs && type);
-	
+
 	// Create the ComponentInfo
 	hash_t c_id = ecs->_last_component++;
 	ComponentInfo *info = ht_insert(ecs->components, c_id, NULL);
 	if (!info) return NULL;
-	
+
 	// Setup the members
 	info->id = c_id;
 	info->type = type->type_hash;
 	dynarray_t *carr = &type->components;
-	
+
 	// Allocate the component data
 	void *comp = dyn_insert(carr, carr->size, NULL);
 	if (!comp) {
 		ht_delete(ecs->components, info->id);
 		return NULL;
 	}
-	
+
 	// Store the id with the data.
 	*(hash_t *)comp = info->id;
 	// Set the component data pointer.
 	comp += sizeof(hash_t);
 	info->component = (Component *)comp;
-	
+
 	// Run the component creation function.
 	if (type->cr_func) type->cr_func(info->component);
-	
+
 	return info;
+}
+
+ComponentInfo* Manager_GetComponent(ECS *ecs, hash_t id)
+{
+	assert(ecs && id);
+
+	return ht_get(ecs->components, id);
 }
 
 void Manager_DeleteComponent(ECS *ecs, ComponentInfo *comp)
 {
 	assert(ecs && comp && !comp->owner);
-	
+
 	ComponentType *type = ht_get(ecs->cm_types, comp->type);
 	if (!type) return;
-	
+
 	// Call the dtor.
 	if (type->dl_func) type->dl_func(comp->component);
 
 	// Check that this type actually has components.
 	dynarray_t *carr = &type->components;
 	if (carr->size == 0) return;
-	
+
 	// Find the index of the component to be deleted.
 	int comp_idx = -1;
 	for (int idx = 0; idx < carr->size; idx++) {
@@ -82,23 +89,23 @@ void Manager_DeleteComponent(ECS *ecs, ComponentInfo *comp)
 			break;
 		}
 	}
-	
+
 	// Can't find the component???
 	// Should never happen, but can't be too careful.
 	if (comp_idx == -1) return;
-	
+
 	// Get the component at the end of the array.
 	hash_t *move_hash = dyn_get(carr, -1);
 	ComponentInfo *move_info = ht_get(ecs->components, *move_hash);
-	
+
 	// Swap it into the place of the deleted component.
 	if (!dyn_swap(carr, comp_idx, -1)) return;
 	// And delete the component.
 	dyn_delete(carr, -1);
-	
+
 	// Correct the moved component's pointer.
 	move_info->component = comp->component;
-	
+
 	// And delete the old component info.
 	ht_delete(ecs->components, comp->id);
 }
@@ -108,25 +115,36 @@ void Manager_DeleteComponent(ECS *ecs, ComponentInfo *comp)
 Entity* Manager_CreateEntity(ECS *ecs)
 {
 	assert(ecs);
-	const hash_t ent_id = ++ecs->_last_entity;
-	
+	const hash_t ent_id = ecs->_last_entity++;
+
 	Entity *entity = ht_insert(ecs->entities, ent_id, NULL);
 	if (entity == NULL) return NULL;
-	
+
 	entity->id = ent_id;
-	entity->components = ht_alloc(8, sizeof(ComponentInfo*));
+	dyn_alloc(&entity->components, 8, sizeof(hash_t));
 	entity->ecs = ecs;
-	
+
 	return entity;
+}
+
+Entity* Manager_GetEntity(ECS *ecs, hash_t id)
+{
+	assert(ecs && id);
+
+	return ht_get(ecs->entities, id);
 }
 
 void Manager_DeleteEntity(ECS *ecs, Entity *entity)
 {
 	assert(ecs && entity);
-	
-	// TODO: free the entity's components
-	
+
+	for (size_t idx = 0; idx < entity->components.size; idx++) {
+		hash_t hash = *(hash_t *)dyn_get(&entity->components, idx);
+		ComponentInfo *comp = ECS_EntityGetComponent(entity, hash);
+		ECS_EntityRemoveComponent(entity, hash);
+		ECS_ComponentDelete(ecs, comp);
+	}
+
+	dyn_free(&entity->components);
 	ht_delete(ecs->entities, entity->id);
-	ht_free(entity->components);
-	free(entity);
 }
