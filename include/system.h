@@ -32,13 +32,24 @@ typedef bool (*system_event_func)(Event *ev, void *udata);
 
 /*
     Register a system.
+
+    @param name: the name of the system.
+
+    @param update: the update function to call when generating ECS updates.
+
+    @param event: the event function to call when an event is generated for
+    this system.
+
+    @param collection: a NULL-delimited list of component names the system
+    wants to act upon. Updates are generated for each entity that has all
+    of these components.
 */
 bool ECS_SystemRegister(
     ECS *ecs,
     const char *name,
     system_update_func update,
-    system_collection_func collection,
     system_event_func event,
+    const char **collection,
     System *data
 );
 
@@ -71,15 +82,13 @@ bool ECS_SystemQueueEvent(ECS *ecs, const char *name);
 #define SYSTEM_IMPL(T) \
     static inline void T##_update(Component **c, T *p); \
     static void T##_uf(Component **c, System *p) { return T##_update(c, (T *)p); }; \
-    static inline const char** T##_collection (int *s, T *p); \
-    static const char** T##_cf(int *s, System *p) { return T##_collection(s, (T *)p); }; \
     static inline bool T##_event(Event *e, T *p); \
     static bool T##_ef(Event *e, System *p) { return T##_event(e, (T *)p); };
 
 #define REGISTER_SYSTEM(ECS, T, INST) \
-    ECS_SystemRegister(ECS, #T, T##_uf, T##_cf, T##_ef, INST)
+    ECS_SystemRegister(ECS, #T, T##_uf, T##_ef, T##_collection, INST)
 
 #define REGISTER_SYSTEM_NO_UDATA(ECS, T) \
-    ECS_SystemRegister(ECS, #T, T##update, T##collection, T##_event, NULL)
+    ECS_SystemRegister(ECS, #T, T##_update, T##_event, T##_collection, NULL)
 
 #endif /* end of include guard: ECS_SYSTEM_H */

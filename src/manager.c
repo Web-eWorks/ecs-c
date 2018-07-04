@@ -162,7 +162,17 @@ bool Manager_RegisterSystem(ECS *ecs, SystemInfo *info)
 {
 	assert(ecs && ecs->systems && info);
 
+	bool ok = dyn_alloc(&info->ent_queue, 128, sizeof(hash_t));
+	if (!ok) return false;
+
 	SystemInfo *_info = ht_insert(ecs->systems, hash_string(info->name), info);
+
+	if (!_info) {
+		free((char *)info->name);
+		free((char *)info->collection.types);
+		dyn_free(&info->ent_queue);
+	}
+
 	return _info ? true : false;
 }
 
@@ -184,4 +194,22 @@ void Manager_UnregisterSystem(ECS *ecs, const char *name)
 	free((char *)info->name);
 
 	ht_delete(ecs->systems, hash_string(name));
+}
+
+bool Manager_ShouldSystemQueueEntity(ECS *ecs, SystemInfo *system, Entity *entity)
+{
+	assert(ecs && system && entity);
+
+	// If we don't want at least one component, we only update the system once.
+	if (system->collection.size < 1) return false;
+
+	bool should_queue = true;
+	for (size_t idx = 0; idx < system->collection.size; idx++) {
+		if (!ECS_EntityGetComponentOfType(entity, system->collection.types[idx], 0)) {
+			should_queue = false;
+			break;
+		}
+	}
+
+	return should_queue;
 }

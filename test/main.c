@@ -19,10 +19,6 @@ const char* TestComponent_GetString(TestComponent *comp)
 	return comp->string;
 }
 
-const char* collection[1] = {
-	"TestComponent"
-};
-
 SYSTEM_IMPL(TestSystem)
 void TestSystem_update(Component **c, TestSystem *system)
 {
@@ -31,15 +27,14 @@ void TestSystem_update(Component **c, TestSystem *system)
 	TestComponent *comp = c[0];
 	puts(TestComponent_GetString(comp));
 }
-const char** TestSystem_collection(int *size, TestSystem *system)
-{
-	*size = 1;
-	return collection;
-}
 bool TestSystem_event(Event *event, TestSystem *system)
 {
 	return false;
 }
+const char* TestSystem_collection[2] = {
+	"TestComponent",
+	NULL
+};
 
 int main (int argc, const char **argv)
 {
@@ -47,6 +42,9 @@ int main (int argc, const char **argv)
 
 	bool res = REGISTER_COMPONENT(ecs, TestComponent);
 	assert(res);
+
+	TestSystem *test_sys = malloc(sizeof(TestSystem));
+	res = REGISTER_SYSTEM(ecs, TestSystem, test_sys);
 
 	printf("Initialization done (1/4).\n");
 
@@ -58,7 +56,7 @@ int main (int argc, const char **argv)
 	res = ECS_EntityAddComponent(entity, comp);
 	assert(res);
 	printf("Component addr: %p, Entity Component addr: %p.\n", comp,
-		ECS_EntityGetComponentOfType(entity, "TestComponent", 0));
+		ECS_EntityGetComponentOfType(entity, hash_string("TestComponent"), 0));
 
 	char *str = (char *)ECS_ComponentToString(ecs, comp);
 	printf("Testing component ToString: %s\n", str); free(str);
@@ -76,6 +74,9 @@ int main (int argc, const char **argv)
 	printf("Update done (3/4).\n");
 
 	ECS_EntityDelete(entity);
+
+	ECS_SystemUnregister(ecs, "TestSystem");
+	free(test_sys);
 
 	ECS_Delete(ecs);
 

@@ -46,7 +46,7 @@ ComponentInfo* ECS_EntityGetComponent(Entity *entity, hash_t comp);
 	Returns the `idx` component of `type` attached to this entity. If there are
 	no components of that type, or there are `idx` or less, returns NULL.
 */
-ComponentInfo* ECS_EntityGetComponentOfType(Entity *entity, const char *type, size_t idx);
+ComponentInfo* ECS_EntityGetComponentOfType(Entity *entity, hash_t type, size_t idx);
 
 /*
 	Remove a component from the entity. Does not free the component.

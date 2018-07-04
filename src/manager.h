@@ -26,17 +26,22 @@ struct ECS {
 	// component type registry
 	hashtable_t *cm_types;
 	dynarray_t update_systems;
-
 };
+
+typedef struct {
+	int size;
+	hash_t *types;
+} SystemCollection;
 
 struct SystemInfo {
     const char *name;
     hash_t name_hash;
     system_update_func up_func;
-    system_collection_func coll_func;
     system_event_func ev_func;
+	SystemCollection collection;
 	void *udata;
     EventQueue *ev_queue;
+	dynarray_t ent_queue;
 };
 
 typedef struct {
@@ -65,5 +70,6 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity);
 bool Manager_RegisterSystem(ECS *ecs, SystemInfo *info);
 SystemInfo* Manager_GetSystem(ECS *ecs, const char *name);
 void Manager_UnregisterSystem(ECS *ecs, const char *name);
+bool Manager_ShouldSystemQueueEntity(ECS *ecs, SystemInfo *sys, Entity *entity);
 
 #endif
