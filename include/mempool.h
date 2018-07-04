@@ -5,16 +5,22 @@
 
 #include <stdlib.h>
 
-typedef struct {
-    void **free;
-    void **last;
-    void **seg;
-    size_t entry_size;
-    size_t min_size;
-} mempool_t;
+typedef struct mempool_t mempool_t;
 
 /*
     Allocate and return a new mempool_t.
+
+    `min_size` sets the default allocation count (the number of chunks in the
+    pool). When the pool grows, it will grow by this amount.
+
+    `entry_size` sets the allocation size (the size of the chunks)
+
+    The first chunk is always aligned to an 8-byte boundary for performance. It
+    is the responsibility of the caller to select a chunk size that maintains
+    the alignment requirements of the data stored therein.
+
+    It is guaranteed that all chunks are effectively contiguous, so the chunk
+    size must be a multiple of the alignment requirement of the stored data.
 */
 mempool_t* mp_init(size_t min_size, size_t entry_size);
 

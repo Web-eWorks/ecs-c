@@ -24,6 +24,16 @@
 
 */
 
+struct mempool_t {
+   void **free;
+   void **last;
+   void **seg;
+   size_t entry_size;
+   size_t min_size;
+   // Align the contents of the pool to 8-byte boundaries for performance.
+   char data[] __attribute__((aligned(8)));
+};
+
 // Run through a new segment and setup the next pointers.
 static void init_segment(mempool_t *mp, void *segment, size_t size)
 {
@@ -38,14 +48,18 @@ static void init_segment(mempool_t *mp, void *segment, size_t size)
 
 mempool_t* mp_init(size_t min_size, size_t entry_size)
 {
+    // Must have at least one element (though larger powers of two are
+    // better for performance)
     min_size = min_size > 0 ? min_size : 1;
+
+    // Must have at least the size of a void* to store the header.
     entry_size = entry_size > sizeof(void *) ? entry_size : sizeof(void *);
 
     mempool_t *mp = malloc(sizeof(mempool_t) + min_size * entry_size);
     if (!mp) return NULL;
 
     // setup all the variables
-    mp->free = (void *)&mp[1];
+    mp->free = (void**)mp->data;
     mp->entry_size = entry_size;
     mp->min_size = min_size;
     mp->seg = NULL;

@@ -42,9 +42,8 @@ typedef struct bucket_t bucket_t;
 struct bucket_t {
 	bucket_t *prev;
 	hash_t hash;
-	// this stores raw data, but is defined as a pointer type to align it to a
-	// proper boundary.
-	void *data[];
+	// this stores the hashtable's data. It is aligned to the 8-byte boundary
+	char data[] __attribute__((aligned(8)));
 };
 
 struct hashtable_t {
@@ -130,7 +129,33 @@ static bool resize(hashtable_t *ht) {
 	ht->size = newsize;
 
 	// Size of the hashtable changed, so we need to rehash all the entries.
-	// TODO: rehash
+	for (size_t idx = 0; idx < ht->size; idx++) {
+		// the entry before this one in the chain.
+		bucket_t *next = NULL;
+		// the current entry
+		bucket_t *entry = ht->buckets[idx];
+		while (entry != NULL) {
+			size_t n_idx = get_bucket_idx(ht, entry->hash);
+			// move the entry to its proper bucket.
+			if (n_idx != idx) {
+				// remove the entry from the current chain.
+				if (next == NULL) ht->buckets[idx] = entry->prev;
+				else next->prev = entry->prev;
+
+				// insert it into the other chain.
+				entry->prev = ht->buckets[n_idx];
+				ht->buckets[n_idx] = entry;
+
+				// reset with the new top of this bucket.
+				entry = ht->buckets[idx];
+			}
+			else {
+				// walk through the chain.
+				next = entry;
+				entry = entry->prev;
+			}
+		}
+	}
 
 	return true;
 }
