@@ -33,11 +33,10 @@ hash_t hash_bytes(const char *string, size_t len)
 #define LOAD_MAX 0.8f
 #define RESIZE_FACTOR 1.6f
 
-// Handy little tricks
-#define GET_ENTRY_HASH(p) *(hash_t *)&(p)[1]
+// Walk backwards until condition c is met.
 #define WALK_BACKWARDS(ht, idx, c) \
 	bucket_t *ent = (ht)->buckets[(idx)]; \
-	while (ent c) ent = ent->prev
+	while (!(c)) ent = ent->prev
 
 typedef struct bucket_t bucket_t;
 struct bucket_t {
@@ -174,24 +173,27 @@ void* ht_get(hashtable_t *ht, hash_t hash)
 }
 
 // Get the next hashtable entry after the current.
+// Calling the function with hash = 0 gets the first entry,
 hash_t ht_next(hashtable_t *ht, hash_t hash)
 {
 	assert(ht && ht->buckets && ht->storage);
 
 	if (ht->count < 1) return 0;
 
-	size_t idx = get_bucket_idx(ht, hash);
 	bucket_t *entry = get_entry(ht, hash);
+	size_t idx = entry ? get_bucket_idx(ht, hash) : 0;
 
-	if (!entry || ht->buckets[idx] == entry) {
-		// increment until we find a good bucket.
-		do {
-			idx = (idx + 1) % ht->size;
-		} while (ht->buckets[idx] == NULL);
+	// We'll always hit the entry before we hit NULL
+	if (entry && ht->buckets[idx] != entry) {
+		WALK_BACKWARDS(ht, idx, ent->prev == entry);
+		return ent->hash;
 	}
+	else if (entry) idx++;
 
-	// TODO: fix the segfault.
-	WALK_BACKWARDS(ht, idx, != entry);
+	while (ht->buckets[idx] == NULL && idx < ht->size) idx++;
+	if (!ht->buckets[idx]) return 0;
+
+	WALK_BACKWARDS(ht, idx, ent->prev == NULL);
 	return ent->hash;
 }
 
@@ -203,10 +205,16 @@ void ht_delete(hashtable_t *ht, hash_t hash)
 	bucket_t *entry = get_entry(ht, hash);
 	if (!entry) return;
 
-	// Get the next entry in the chain.
-	WALK_BACKWARDS(ht, idx, != entry);
-	// Remove this entry.
-	ent->prev = entry->prev;
+	if (ht->buckets[idx] == entry) {
+		// Remove this entity from the chain.
+		ht->buckets[idx] = entry->prev;
+	}
+	else {
+		// Get the next entry in the chain.
+		WALK_BACKWARDS(ht, idx, ent->prev == entry);
+		// Remove this entry.
+		ent->prev = entry->prev;
+	}
 
 	// Deallocate the block.
 	mp_free(ht->storage, entry);
