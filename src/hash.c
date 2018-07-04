@@ -42,7 +42,9 @@ typedef struct bucket_t bucket_t;
 struct bucket_t {
 	bucket_t *prev;
 	hash_t hash;
-	char data[];
+	// this stores raw data, but is defined as a pointer type to align it to a
+	// proper boundary.
+	void *data[];
 };
 
 struct hashtable_t {
