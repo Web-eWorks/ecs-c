@@ -44,14 +44,19 @@ void ECS_ComponentDelete(ECS *ecs, ComponentInfo *info);
 const char* ECS_ComponentToString(ECS *ecs, ComponentInfo *info);
 
 /*
-	Functions create and delete custom components.
+	Custom component initialization function.
 
-	These functions are passed a pointer to the memory allocated for the
-	components by the ECS and should not perform any allocation of their own.
-
-	Allocation is handled internally for data locality and performance reasons.
+	The function is passed a pointer to pre-allocated memory, and should only
+	allocate memory where necessary for the component's members.
 */
 typedef void (*component_create_func)(Component*);
+
+/*
+	Custom component deletion function.
+
+	This function is passed a pointer to memory that will be freed by the ECS,
+	and should only perform deletion of the component's members where necessary.
+*/
 typedef void (*component_delete_func)(Component*);
 
 /*
@@ -82,6 +87,12 @@ bool ECS_ComponentRegisterType(
 	component_create_func cr_func,
 	component_delete_func dl_func,
 	size_t size);
+
+/*
+	Returns whether a component type has already been registered with that
+	name.
+*/
+bool ECS_HasComponentType(ECS *ecs, const char *type);
 
 /*
 	A set of convenience macros for working with components.

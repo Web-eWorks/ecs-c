@@ -15,17 +15,18 @@
 
 struct ECS {
 	hashtable_t *components;
-	hashtable_t *systems;
-	// TODO: need a better way to store entities so that pointers are not invalidated.
 	hashtable_t *entities;
+	hashtable_t *systems;
 
 	// incremental counters for generating ids
-	hash_t _last_entity;
 	hash_t _last_component;
+	hash_t _last_entity;
 	hash_t _last_system;
 
-	// type registries
+	// component type registry
 	hashtable_t *cm_types;
+	dynarray_t update_systems;
+
 };
 
 struct SystemInfo {
@@ -49,6 +50,7 @@ typedef struct {
 
 /* -------------------------------------------------------------------------- */
 
+bool Manager_HasComponentType(ECS *ecs, hash_t type);
 ComponentType* Manager_GetComponentType(ECS *ecs, const char *type);
 bool Manager_RegisterComponentType(ECS *ecs, ComponentType *type);
 

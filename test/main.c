@@ -41,42 +41,45 @@ bool TestSystem_event(Event *event, TestSystem *system)
 	return false;
 }
 
-int main (int argc, const char **argv) {
-
-	const char *str = "This is a test.";
-	const hash_t str_hash = hash_string(str);
-
-	printf("%s -> %x\n", str, str_hash);
-
+int main (int argc, const char **argv)
+{
 	ECS *ecs = ECS_New();
 
 	bool res = REGISTER_COMPONENT(ecs, TestComponent);
 	assert(res);
+
+	printf("Initialization done (1/4).\n");
+
 	ComponentInfo *comp = ECS_ComponentNew(ecs, "TestComponent");
 	assert(comp);
-
-	printf("Part 1/3 done.\n");
-
-	const char *comp_str = ECS_ComponentToString(ecs, comp);
-	puts(comp_str);
-	free((char *)comp_str);
-
 	Entity *entity = ECS_EntityNew(ecs);
 	assert(entity);
+
 	res = ECS_EntityAddComponent(entity, comp);
 	assert(res);
+	printf("Component addr: %p, Entity Component addr: %p.\n", comp,
+		ECS_EntityGetComponentOfType(entity, "TestComponent", 0));
 
-	const char *ent_str = ECS_EntityToString(entity);
-	puts(ent_str);
-	free((char *)ent_str);
+	char *str = (char *)ECS_ComponentToString(ecs, comp);
+	printf("Testing component ToString: %s\n", str); free(str);
+	str = (char *)ECS_EntityToString(entity);
+	printf("Testing entity ToString: %s\n", str); free(str);
 
-	printf("Part 2/3 done.\n");
+	printf("Setup done (2/4).\n");
+
+	ECS_UpdateBegin(ecs);
+
+	ECS_UpdateSystems(ecs);
+
+	ECS_UpdateEnd(ecs);
+
+	printf("Update done (3/4).\n");
 
 	ECS_EntityDelete(entity);
 
 	ECS_Delete(ecs);
 
-	printf("Part 3/3 done.\n");
+	printf("Shutdown done (4/4).\n");
 
 	return 0;
 }

@@ -57,6 +57,23 @@ ComponentInfo* ECS_EntityGetComponent(Entity *entity, hash_t hash)
 	return comp;
 }
 
+ComponentInfo* ECS_EntityGetComponentOfType(Entity *entity, const char *type, size_t idx)
+{
+	assert(entity && entity->ecs && type);
+
+	hash_t type_hash = hash_string(type);
+	size_t found_count = 0;
+	for (size_t idx = 0; idx < entity->components.size; idx++) {
+		hash_t *hash = dyn_get(&entity->components, idx);
+		ComponentInfo *comp = Manager_GetComponent(entity->ecs, *hash);
+		if (!comp || comp->type != type_hash) continue;
+		if (found_count == idx) return comp;
+		else found_count++;
+	}
+
+	return NULL;
+}
+
 void ECS_EntityRemoveComponent(Entity *entity, hash_t hash)
 {
 	assert(entity && entity->ecs && hash);

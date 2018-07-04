@@ -2,3 +2,4 @@
 /main
 *.so
 *.o
+/compile_commands.json

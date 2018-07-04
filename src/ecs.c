@@ -5,14 +5,17 @@ ECS* ECS_New()
 {
 	ECS *ecs = malloc(sizeof(ECS));
 
-	ecs->components = ht_alloc(64, sizeof(ComponentInfo));
-	ecs->cm_types = ht_alloc(64, sizeof(ComponentType));
+	ecs->components = ht_alloc(1024, sizeof(ComponentInfo));
+	ecs->_last_component = 1;
+
+
+	ecs->entities = ht_alloc(1024, sizeof(Entity));
+	ecs->_last_entity = 1;
 
 	ecs->systems = ht_alloc(64, sizeof(SystemInfo));
-	ecs->entities = ht_alloc(256, sizeof(Entity));
-	ecs->_last_entity = 1;
-	ecs->_last_component = 1;
 	ecs->_last_system = 1;
+
+	ecs->cm_types = ht_alloc(64, sizeof(ComponentType));
 
 	return ecs;
 }
@@ -50,4 +53,21 @@ void ECS_Delete(ECS *ecs)
 	ht_free(ecs->cm_types);
 
 	free(ecs);
+}
+
+// Create entity queues for each system, resolve the order of systems, etc.
+bool ECS_UpdateBegin(ECS *ecs)
+{
+	return true;
+}
+
+//
+bool ECS_UpdateSystems(ECS *ecs)
+{
+	return true;
+}
+
+void ECS_UpdateEnd(ECS *ecs)
+{
+
 }

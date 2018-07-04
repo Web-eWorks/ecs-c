@@ -62,7 +62,12 @@ bool ECS_ComponentRegisterType(
 	assert(ecs && type);
 
 	if (strlen(type) == 0) {
-		printf("Error: cannot register component types with empty names!\n");
+		printf("Error: cannot register component types with empty names.\n");
+		return false;
+	}
+
+	if (ECS_HasComponentType(ecs, type)) {
+		printf("Error: cannot re-register an already existing type %s.\n", type);
 		return false;
 	}
 
@@ -81,4 +86,11 @@ bool ECS_ComponentRegisterType(
 	}
 
 	return true;
+}
+
+bool ECS_HasComponentType(ECS *ecs, const char *type)
+{
+	assert(ecs && type);
+
+	return Manager_HasComponentType(ecs, hash_string(type));
 }

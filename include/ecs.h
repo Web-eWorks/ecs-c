@@ -24,6 +24,9 @@ typedef struct Entity Entity;
 typedef void System;
 typedef struct SystemInfo SystemInfo;
 
+/*
+    The core datastructure of the ECS.
+*/
 typedef struct ECS ECS;
 
 /*
@@ -50,9 +53,9 @@ void ECS_Delete(ECS *ecs);
 bool ECS_UpdateBegin(ECS *ecs);
 
 /*
-    Update a system.
+    Update all systems.
 */
-bool ECS_UpdateSystem(ECS *ecs, const char *name);
+bool ECS_UpdateSystems(ECS *ecs);
 
 /*
     End an ECS update.

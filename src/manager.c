@@ -5,8 +5,7 @@ ComponentType* Manager_GetComponentType(ECS *ecs, const char *type)
 {
 	assert(ecs && type);
 
-	hash_t type_hash = hash_string(type);
-	return ht_get(ecs->cm_types, type_hash);
+	return ht_get(ecs->cm_types, hash_string(type));
 }
 
 // Registers a new component type.
@@ -24,6 +23,14 @@ bool Manager_RegisterComponentType(ECS *ecs, ComponentType *type)
 	}
 
 	return true;
+}
+
+// Return whether a component type has been registered.
+bool Manager_HasComponentType(ECS *ecs, hash_t type)
+{
+	assert(ecs && ecs->cm_types && type);
+
+	return ht_get(ecs->cm_types, type) ? true : false;
 }
 
 ComponentInfo* Manager_CreateComponent(ECS *ecs, ComponentType *type)
