@@ -16,6 +16,7 @@
 struct ECS {
 	hashtable_t *components;
 	hashtable_t *systems;
+	// TODO: need a better way to store entities so that pointers are not invalidated.
 	hashtable_t *entities;
 
 	// incremental counters for generating ids

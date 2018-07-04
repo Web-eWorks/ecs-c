@@ -44,4 +44,19 @@ typedef struct ECS ECS;
 ECS* ECS_New();
 void ECS_Delete(ECS *ecs);
 
+/*
+    Trigger an ECS update.
+*/
+bool ECS_UpdateBegin(ECS *ecs);
+
+/*
+    Update a system.
+*/
+bool ECS_UpdateSystem(ECS *ecs, const char *name);
+
+/*
+    End an ECS update.
+*/
+void ECS_UpdateEnd(ECS *ecs);
+
 #endif

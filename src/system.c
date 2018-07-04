@@ -7,7 +7,7 @@ bool ECS_SystemRegister(
     system_update_func update,
     system_collection_func collection,
     system_event_func event,
-    void *udata)
+    System *data)
 {
     assert(ecs && name && update && collection);
 
@@ -17,7 +17,7 @@ bool ECS_SystemRegister(
         update,
         collection,
         event,
-        udata,
+        data,
         EventQueue_New()
     };
 

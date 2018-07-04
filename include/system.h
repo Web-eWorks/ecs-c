@@ -39,14 +39,23 @@ bool ECS_SystemRegister(
     system_update_func update,
     system_collection_func collection,
     system_event_func event,
-    void *udata
+    System *data
 );
 
 /*
     Unregister a system from the ECS. The calling code should free the system's
-    udata pointer if present.
+    userdata pointer if present.
 */
 void ECS_SystemUnregister(ECS *ecs, const char *name);
+
+/* -------------------------------------------------------------------------- */
+
+/*
+    Send an event to a system.
+*/
+bool ECS_SystemQueueEvent(ECS *ecs, const char *name);
+
+/* -------------------------------------------------------------------------- */
 
 /*
     Macros for easy creation of systems.
@@ -61,11 +70,11 @@ void ECS_SystemUnregister(ECS *ecs, const char *name);
 
 #define SYSTEM_IMPL(T) \
     static inline void T##_update(Component **c, T *p); \
-    static void T##_uf(Component **c, void *p) { return T##_update(c, (T *)p); }; \
+    static void T##_uf(Component **c, System *p) { return T##_update(c, (T *)p); }; \
     static inline const char** T##_collection (int *s, T *p); \
-    static const char** T##_cf(int *s, void *p) { return T##_collection(s, (T *)p); }; \
+    static const char** T##_cf(int *s, System *p) { return T##_collection(s, (T *)p); }; \
     static inline bool T##_event(Event *e, T *p); \
-    static bool T##_ef(Event *e, void *p) { return T##_event(e, (T *)p); };
+    static bool T##_ef(Event *e, System *p) { return T##_event(e, (T *)p); };
 
 #define REGISTER_SYSTEM(ECS, T, INST) \
     ECS_SystemRegister(ECS, #T, T##_uf, T##_cf, T##_ef, INST)

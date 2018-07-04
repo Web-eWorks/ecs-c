@@ -4,15 +4,10 @@
 #define ECS_HASH_H
 
 #include <stddef.h>
+#include "mempool.h"
 
 typedef unsigned int hash_t;
-
-typedef struct {
-	size_t size;
-	size_t entry_size;
-	size_t count;
-	void **ptr;
-} hashtable_t;
+typedef struct hashtable_t hashtable_t;
 
 hash_t hash_string(const char *str);
 hash_t hash_bytes(const char *bytes, const size_t len);
