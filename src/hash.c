@@ -217,8 +217,8 @@ hash_t ht_next(hashtable_t *ht, hash_t hash)
 	}
 	else if (entry) idx++;
 
-	while (ht->buckets[idx] == NULL && idx < ht->size) idx++;
-	if (!ht->buckets[idx]) return 0;
+	while (idx < ht->size && ht->buckets[idx] == NULL) idx++;
+	if (idx >= ht->size || !ht->buckets[idx]) return 0;
 
 	WALK_BACKWARDS(ht, idx, ent->prev == NULL);
 	return ent->hash;

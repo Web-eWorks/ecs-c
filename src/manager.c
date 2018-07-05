@@ -192,6 +192,8 @@ void Manager_UnregisterSystem(ECS *ecs, const char *name)
 
 	EventQueue_Free(info->ev_queue);
 	free((char *)info->name);
+	free(info->collection.types);
+	dyn_free(&info->ent_queue);
 
 	ht_delete(ecs->systems, hash_string(name));
 }

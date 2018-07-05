@@ -3,3 +3,5 @@
 *.so
 *.o
 /compile_commands.json
+/massif.out*
+/memcheck.out*

@@ -15,7 +15,6 @@ static inline int clamp(int val, int min, int max)
 bool dyn_alloc(dynarray_t *arr, size_t size, size_t entry_size)
 {
 	assert(arr);
-	if (arr->ptr) dyn_free(arr);
 
 	arr->size = 0;
 	arr->entry_size = entry_size;

@@ -51,6 +51,7 @@ void ECS_Delete(ECS *ecs)
 		}
 	}
 	ht_free(ecs->cm_types);
+	dyn_free(&ecs->update_systems);
 
 	free(ecs);
 }

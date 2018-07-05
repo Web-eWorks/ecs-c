@@ -7,7 +7,7 @@
 
 COMPONENT_IMPL(TestComponent)
 void TestComponent_new(TestComponent *comp) {
-	comp->string = malloc(15);
+	comp->string = malloc(16);
 	if (comp->string) strcpy(comp->string, "This is a test.");
 }
 void TestComponent_free(TestComponent *comp) {
