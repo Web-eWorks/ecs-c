@@ -19,7 +19,11 @@ debug release:
 	@ $(MAKE) -f test/Makefile $@
 	@ echo "> $(GR)Finished $@ compilation.$(RS)"
 
-test-all: test
+test-run:
+	@ ./main
+	@ echo "> $(GR)Test runner finished successfully.$(RS)"
+
+test-check:
 	@ echo "Running memcheck."
 	@ $(MEMCHECK) ./main 2> memcheck.out.txt > /dev/null
 	@ echo "> $(GR)Memcheck finished successfully.$(RS)"
@@ -27,15 +31,12 @@ test-all: test
 	@ $(MASSIF) ./main &> /dev/null
 	@ ms_print massif.out > massif.out.txt
 	@ echo "> $(GR)Massif finished successfully.$(RS)"
-	@ echo
-	@ echo "$(GR)$(BD)All test data logged successfully!$(RS)"
 
-test: debug
-	@ ./main
-	@ echo "> $(GR)Tests finished successfully.$(RS)"
+test: debug test-check test-run
+	@ echo "$(GR)$(BD)All test data logged successfully!$(RS)"
 
 clean:
 	@ $(MAKE) -f src/Makefile clean
 	@ $(MAKE) -f test/Makefile clean
 	@ rm -rf obj/
-	@ rm -f memcheck.out.txt massif.out massif.out.txt
+	@ rm -f {memcheck,cachegrind,callgrind,massif}.out*

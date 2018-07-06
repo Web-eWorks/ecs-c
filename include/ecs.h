@@ -9,6 +9,7 @@
 #define ECS_MAIN_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 /*
 	Forward declarations.
@@ -30,6 +31,24 @@ typedef struct SystemInfo SystemInfo;
 typedef struct ECS ECS;
 
 /*
+    The performance of the ECS is affected by the contiguous nature of it's
+    data storage.
+
+    The default values provide a fairly good tradeoff between memory
+    fragmentation and consumption, but an application may pass its own values
+    for these allocations.
+*/
+typedef struct {
+    size_t components;
+    size_t entities;
+    size_t systems;
+    size_t cm_types;
+
+    size_t entity_components;
+    size_t system_entities;
+} ECS_AllocInfo;
+
+/*
     Includes.
 */
 
@@ -45,6 +64,7 @@ typedef struct ECS ECS;
 	Create and destroy an ECS.
 */
 ECS* ECS_New();
+ECS* ECS_CustomNew(const ECS_AllocInfo *alloc);
 void ECS_Delete(ECS *ecs);
 
 /*

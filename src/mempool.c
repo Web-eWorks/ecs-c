@@ -34,13 +34,15 @@ struct mempool_t {
    char data[] __attribute__((aligned(8)));
 };
 
+#include <stdio.h>
+
 // Run through a new segment and setup the next pointers.
 static void init_segment(mempool_t *mp, void *segment, size_t size)
 {
+    void **ptr = segment;
     // setup the linked list
     for (size_t idx = 0; idx < size; idx++) {
-        void **ptr = segment + mp->entry_size * idx;
-        *ptr = ptr + mp->entry_size;
+        ptr = ptr[0] = (char *)ptr + mp->entry_size;
     }
     mp->last = segment + (size - 1) * mp->entry_size;
     *mp->last = NULL;
@@ -73,8 +75,8 @@ void mp_destroy(mempool_t *pool)
     assert(pool);
 
     // destroy each segment.
-    void **s = pool->seg;
     while (pool->seg != NULL) {
+        void **s = pool->seg;
         pool->seg = (void **)*s;
         free(s);
     }
@@ -87,8 +89,14 @@ bool insert_segment(mempool_t *pool)
     void **seg = malloc(sizeof(void *) + pool->min_size * pool->entry_size);
     if (!seg) return false;
 
-    *seg = pool->seg;
+    // The segment points to the next in the chain,
+    seg[0] = pool->seg;
+    // and the pool points to the end of the chain
     pool->seg = seg;
+
+    // The last entry in the old pool now points to the first entry in the new
+    // pool.
+    *pool->last = seg + 1;
     init_segment(pool, seg + 1, pool->min_size);
 
     return true;
@@ -96,10 +104,12 @@ bool insert_segment(mempool_t *pool)
 
 void* mp_alloc(mempool_t *pool)
 {
-    assert(pool);
+    assert(pool && pool->free);
 
     // If we're at the last element in the pool, create a new segment.
-    if (pool->free == pool->last && !insert_segment(pool)) return NULL;
+    if (pool->free == pool->last) {
+        if (!insert_segment(pool)) return NULL;
+    }
 
     // Advance the free pointer.
     void *n = pool->free;
@@ -112,7 +122,7 @@ void mp_free(mempool_t *pool, void *ptr)
 {
     assert(pool);
 
-    // trust the pointer resides in the pool.
+    // trust the pointer resides in the pool, and append it to the start of the chain.
     *(void **)ptr = pool->free;
     pool->free = ptr;
 

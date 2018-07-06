@@ -21,4 +21,4 @@ $(OUT): $(OBJS)
 
 clean:
 	@ rm -rf $(OBJS) $(OUT)
-	@ echo "Cleaned object files."
+	@ echo "Cleaned test build products."

@@ -16,8 +16,9 @@ bool Manager_RegisterComponentType(ECS *ecs, ComponentType *type)
 	type = ht_insert(ecs->cm_types, type->type_hash, type);
 	if (type == NULL) return false;
 
-	// We store component data with the id of the owning ComponentInfo.
-	if (!dyn_alloc(&type->components, 64, sizeof(hash_t) + type->type_size)) {
+	type->components = mp_init(128, type->type_size);
+	if (!type->components) {
+		free((char *)type->type);
 		ht_delete(ecs->cm_types, type->type_hash);
 		return false;
 	}
@@ -45,22 +46,20 @@ ComponentInfo* Manager_CreateComponent(ECS *ecs, ComponentType *type)
 	// Setup the members
 	info->id = c_id;
 	info->type = type->type_hash;
-	dynarray_t *carr = &type->components;
 
+	if (!type->components){
+		assert(type->components);
+	}
 	// Allocate the component data
-	void *comp = dyn_insert(carr, carr->size, NULL);
-	if (!comp) {
+	info->component = mp_alloc(type->components);
+	if (!info->component) {
 		ht_delete(ecs->components, info->id);
 		return NULL;
 	}
 
-	// Store the id with the data.
-	*(hash_t *)comp = info->id;
-	// Set the component data pointer.
-	comp += sizeof(hash_t);
-	info->component = (Component *)comp;
-
-	// Run the component creation function.
+	// Zero-initialize the component data,
+	memset(info->component, 0, type->type_size);
+	// and run the component creation function.
 	if (type->cr_func) type->cr_func(info->component);
 
 	return info;
@@ -77,43 +76,15 @@ void Manager_DeleteComponent(ECS *ecs, ComponentInfo *comp)
 {
 	assert(ecs && comp && !comp->owner);
 
+	// Components must have a valid type.
 	ComponentType *type = ht_get(ecs->cm_types, comp->type);
 	if (!type) return;
 
 	// Call the dtor.
 	if (type->dl_func) type->dl_func(comp->component);
 
-	// Check that this type actually has components.
-	dynarray_t *carr = &type->components;
-	if (carr->size == 0) return;
-
-	// Find the index of the component to be deleted.
-	int comp_idx = -1;
-	for (int idx = 0; idx < carr->size; idx++) {
-		hash_t *hash = dyn_get(carr, idx);
-		if (hash && *hash == comp->id) {
-			comp_idx = idx;
-			break;
-		}
-	}
-
-	// Can't find the component???
-	// Should never happen, but can't be too careful.
-	if (comp_idx == -1) return;
-
-	// Get the component at the end of the array.
-	hash_t *move_hash = dyn_get(carr, -1);
-	ComponentInfo *move_info = ht_get(ecs->components, *move_hash);
-
-	// Swap it into the place of the deleted component.
-	if (!dyn_swap(carr, comp_idx, -1)) return;
-	// And delete the component.
-	dyn_delete(carr, -1);
-
-	// Correct the moved component's pointer.
-	move_info->component = comp->component;
-
-	// And delete the old component info.
+	// Delete the component and it's data.
+	mp_free(type->components, comp->component);
 	ht_delete(ecs->components, comp->id);
 }
 
@@ -145,11 +116,18 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity)
 {
 	assert(ecs && entity);
 
-	for (size_t idx = 0; idx < entity->components.size; idx++) {
-		hash_t hash = *(hash_t *)dyn_get(&entity->components, idx);
+	while (entity->components.size > 0) {
+		hash_t hash = *(hash_t *)dyn_get(&entity->components, 0);
 		ComponentInfo *comp = ECS_EntityGetComponent(entity, hash);
-		ECS_EntityRemoveComponent(entity, hash);
-		ECS_ComponentDelete(ecs, comp);
+		if (!comp) continue;
+
+		// clear the component's owner
+		comp->owner = NULL;
+		// remove the component from the entity
+		dyn_swap(&entity->components, 0, -1);
+		dyn_delete(&entity->components, -1);
+		// delete the component.
+		Manager_DeleteComponent(ecs, comp);
 	}
 
 	dyn_free(&entity->components);
@@ -183,19 +161,16 @@ SystemInfo* Manager_GetSystem(ECS *ecs, const char *name)
 	return ht_get(ecs->systems, hash_string(name));
 }
 
-void Manager_UnregisterSystem(ECS *ecs, const char *name)
+void Manager_UnregisterSystem(ECS *ecs, SystemInfo *system)
 {
-	assert(ecs && ecs->systems && name);
+	assert(ecs && ecs->systems && system);
 
-	SystemInfo *info = ht_get(ecs->systems, hash_string(name));
-	if (!info) return;
+	EventQueue_Free(system->ev_queue);
+	free((char *)system->name);
+	System_DeleteCollection(&system->collection);
+	dyn_free(&system->ent_queue);
 
-	EventQueue_Free(info->ev_queue);
-	free((char *)info->name);
-	free(info->collection.types);
-	dyn_free(&info->ent_queue);
-
-	ht_delete(ecs->systems, hash_string(name));
+	ht_delete(ecs->systems, system->name_hash);
 }
 
 bool Manager_ShouldSystemQueueEntity(ECS *ecs, SystemInfo *system, Entity *entity)
@@ -214,4 +189,27 @@ bool Manager_ShouldSystemQueueEntity(ECS *ecs, SystemInfo *system, Entity *entit
 	}
 
 	return should_queue;
+}
+
+void Manager_UpdateSystem(ECS *ecs, SystemInfo *system, Entity *entity)
+{
+	assert(ecs && system && system->collection.size > 0 && entity);
+
+	// Systems must have an update function to be registered, and entities don't
+	// get in the queue without having all the required components.
+	for (size_t idx = 0; idx < system->collection.size; idx++) {
+		ComponentInfo *comp = ECS_EntityGetComponentOfType(
+			entity, system->collection.types[idx], 0);
+		system->collection.comps[idx] = comp->component;
+	}
+
+	system->up_func(system->collection.comps, system->udata);
+}
+
+void Manager_SystemEvent(ECS *ecs, SystemInfo *system, Event *ev)
+{
+	assert(ecs && system && ev);
+	if (!system->ev_func) return;
+
+	system->ev_func(ev, system->udata);
 }

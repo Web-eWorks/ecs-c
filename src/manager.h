@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,11 +27,13 @@ struct ECS {
 	// component type registry
 	hashtable_t *cm_types;
 	dynarray_t update_systems;
+	ECS_AllocInfo alloc_info;
 };
 
 typedef struct {
 	int size;
 	hash_t *types;
+	Component **comps;
 } SystemCollection;
 
 struct SystemInfo {
@@ -50,8 +53,11 @@ typedef struct {
 	component_delete_func dl_func;
 	size_t type_size;
 	hash_t type_hash;
-	dynarray_t components;
+	mempool_t *components;
 } ComponentType;
+
+bool System_CreateCollection(SystemCollection *coll, const char **collection);
+void System_DeleteCollection(SystemCollection *coll);
 
 /* -------------------------------------------------------------------------- */
 
@@ -69,7 +75,10 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity);
 
 bool Manager_RegisterSystem(ECS *ecs, SystemInfo *info);
 SystemInfo* Manager_GetSystem(ECS *ecs, const char *name);
-void Manager_UnregisterSystem(ECS *ecs, const char *name);
+void Manager_UnregisterSystem(ECS *ecs, SystemInfo *system);
+
 bool Manager_ShouldSystemQueueEntity(ECS *ecs, SystemInfo *sys, Entity *entity);
+void Manager_UpdateSystem(ECS *ecs, SystemInfo *info, Entity *entity);
+void Manager_SystemEvent(ECS *ecs, SystemInfo *info, Event *event);
 
 #endif

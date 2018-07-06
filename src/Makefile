@@ -4,6 +4,7 @@ HEADER = include/ecs.h
 OUT = libecs.so
 
 CFLAGS += -Iinclude/ -Isrc/ -fPIC
+release: CFLAGS += -DNO_PROFILING -DNDEBUG
 LDFLAGS += -shared
 
 .PHONY: release debug clean
@@ -18,11 +19,9 @@ obj/%.o: src/%.c include/%.h src/%.h $(HEADER)
 
 $(OUT): $(OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS)
-	@ echo "Compilation successful."
 
 release: $(OUT)
-	strip $^
 
 clean:
 	@ rm -rf $(OBJS) $(OUT)
-	@ echo "Cleaned library files."
+	@ echo "Cleaned library build products."

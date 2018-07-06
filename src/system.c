@@ -1,6 +1,31 @@
 #include "system.h"
 #include "manager.h"
 
+bool System_CreateCollection(SystemCollection *coll, const char **collection)
+{
+    size_t idx = 0;
+    while (collection[idx]) idx++;
+
+    coll->size = idx;
+    coll->types = calloc(idx, sizeof(hash_t));
+    coll->comps = calloc(idx, sizeof(Component*));
+    if (!coll->types || !coll->comps) {
+        return false;
+    }
+
+    for (idx = 0; idx < coll->size; idx++) {
+        coll->types[idx] = hash_string(collection[idx]);
+    }
+
+    return true;
+}
+
+void System_DeleteCollection(SystemCollection *coll)
+{
+    free(coll->types);
+    free(coll->comps);
+}
+
 bool ECS_SystemRegister(
     ECS *ecs,
     const char *name,
@@ -16,7 +41,7 @@ bool ECS_SystemRegister(
         hash_string(name),
         update,
         event,
-        {},
+        { 0 },
         data,
         EventQueue_New()
     };
@@ -27,18 +52,10 @@ bool ECS_SystemRegister(
 
     // Convert the collection to type ids for speed.
     if (collection) {
-        int idx = 0;
-        while (collection[idx]) idx++;
-
-        info.collection.size = idx;
-        info.collection.types = calloc(info.collection.size, sizeof(hash_t));
-        if (!info.collection.types) {
+        if (!System_CreateCollection(&info.collection, collection)) {
             free((char *)info.name);
+            System_DeleteCollection(&info.collection);
             return false;
-        }
-
-        for (int idx = 0; idx < info.collection.size; idx++) {
-            info.collection.types[idx] = hash_string(collection[idx]);
         }
     }
 
@@ -54,5 +71,8 @@ SystemInfo* ECS_SystemGet(ECS *ecs, const char *name)
 void ECS_SystemUnregister(ECS *ecs, const char *name)
 {
     assert(ecs && ecs->systems && name);
-    Manager_UnregisterSystem(ecs, name);
+
+    SystemInfo *info = ht_get(ecs->systems, hash_string(name));
+    if (!info) return;
+    Manager_UnregisterSystem(ecs, info);
 }

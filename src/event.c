@@ -34,7 +34,10 @@ bool EventQueue_Pop(EventQueue *queue, Event *ev)
     void *event = dyn_get(&queue->evs, 0);
     if (!ev) return false;
 
-    *ev = *(Event *)event;
+    if (ev) {
+        *ev = *(Event *)event;
+    }
+    
     for (size_t idx = 1; idx < queue->evs.size; idx++) {
         dyn_swap(&queue->evs, idx-1, idx);
     }

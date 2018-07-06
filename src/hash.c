@@ -31,7 +31,6 @@ hash_t hash_bytes(const char *string, size_t len)
 */
 
 #define LOAD_MAX 0.8f
-#define RESIZE_FACTOR 1.6f
 
 // Walk backwards until condition c is met.
 #define WALK_BACKWARDS(ht, idx, c) \
@@ -85,8 +84,10 @@ hashtable_t* ht_alloc(size_t size, size_t val_size)
 	ht->data_size = val_size;
 	ht->entry_size = sizeof(bucket_t) + val_size;
 
+	// There will always be room for at least ht->size entries in the table.
+	// As a consequence, LOAD_MAX must never be > 1.0.
 	ht->buckets = calloc(size, sizeof(bucket_t *));
-	ht->storage = mp_init(ht->size * 2, ht->entry_size);
+	ht->storage = mp_init(ht->size, ht->entry_size);
 
 	if (!ht->buckets || !ht->storage) {
 		ht_free(ht);
@@ -117,13 +118,13 @@ void ht_free(hashtable_t *ht)
 	according to their new indexes
 */
 static bool resize(hashtable_t *ht) {
-	// Resize the bucket list by approx 1.5
-	size_t newsize = floor((float)ht->size * RESIZE_FACTOR);
+	// Resize the bucket list
+	size_t newsize = ht->size * 2;
 	bucket_t **ptr = realloc(ht->buckets, sizeof(bucket_t *) * newsize);
 	if (ptr == NULL) return false;
 
 	// zero the new bucket pointers
-	memset(ptr + ht->size, 0, newsize - ht->size);
+	memset(ptr + ht->size, 0, (newsize - ht->size) * sizeof(bucket_t *));
 
 	ht->buckets = ptr;
 	ht->size = newsize;
@@ -147,7 +148,7 @@ static bool resize(hashtable_t *ht) {
 				ht->buckets[n_idx] = entry;
 
 				// reset with the new top of this bucket.
-				entry = ht->buckets[idx];
+				entry = next ? next->prev : ht->buckets[idx];
 			}
 			else {
 				// walk through the chain.
@@ -164,7 +165,7 @@ void* ht_insert(hashtable_t *ht, hash_t hash, void *data)
 {
 	assert(ht && ht->buckets && ht->storage);
 
-	if (ht->count > 0 && (float)ht->size / ht->count > LOAD_MAX) {
+	if (ht->count > 0 && (float)ht->count / ht->size > LOAD_MAX) {
 		if (!resize(ht)) return NULL;
 	}
 
@@ -175,7 +176,7 @@ void* ht_insert(hashtable_t *ht, hash_t hash, void *data)
 	if (!entry) {
 		bucket_t *ptr = mp_alloc(ht->storage);
 		if (!ptr) return NULL;
-		memset(ptr, 0, ht->entry_size);
+		memset((void *)ptr, 0, ht->entry_size);
 		ptr->prev = ht->buckets[bucket];
 		entry = ht->buckets[bucket] = ptr;
 		ht->count++;
@@ -207,21 +208,35 @@ hash_t ht_next(hashtable_t *ht, hash_t hash)
 
 	if (ht->count < 1) return 0;
 
-	bucket_t *entry = get_entry(ht, hash);
-	size_t idx = entry ? get_bucket_idx(ht, hash) : 0;
+	size_t idx = get_bucket_idx(ht, hash);
+	if (ht->buckets[idx]) {
+		// If we have a bucket and our start hash is not at the end of the bucket:
+		if (ht->buckets[idx]->hash != hash) {
+			bucket_t *entry = ht->buckets[idx];
+			// Find the hash and return the one after it.
+			while (entry->prev) {
+				if (entry->prev->hash == hash) return entry->hash;
+				entry = entry->prev;
+			}
 
-	// We'll always hit the entry before we hit NULL
-	if (entry && ht->buckets[idx] != entry) {
-		WALK_BACKWARDS(ht, idx, ent->prev == entry);
-		return ent->hash;
+			// If the starting hash is not in the table, return the first in
+			// the appropriate bucket.
+			return entry->hash;
+		}
+		// If the starting index is the end of the bucket, find the next bucket.
+		else idx++;
 	}
-	else if (entry) idx++;
 
-	while (idx < ht->size && ht->buckets[idx] == NULL) idx++;
-	if (idx >= ht->size || !ht->buckets[idx]) return 0;
+	// If we don't have a bucket, walk the hashtable until we find one.
+	// Then, get the first entry in the bucket.
+	for (size_t n_idx = idx; n_idx < ht->size; n_idx++) {
+		if (ht->buckets[n_idx]) {
+			WALK_BACKWARDS(ht, n_idx, !ent->prev);
+			return ent->hash;
+		}
+	}
 
-	WALK_BACKWARDS(ht, idx, ent->prev == NULL);
-	return ent->hash;
+	return 0;
 }
 
 void ht_delete(hashtable_t *ht, hash_t hash)
