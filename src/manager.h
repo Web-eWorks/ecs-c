@@ -44,7 +44,7 @@ struct SystemInfo {
 	SystemCollection collection;
 	void *udata;
     EventQueue *ev_queue;
-	dynarray_t ent_queue;
+	hashtable_t *ent_queue;
 };
 
 typedef struct {
@@ -77,6 +77,7 @@ bool Manager_RegisterSystem(ECS *ecs, SystemInfo *info);
 SystemInfo* Manager_GetSystem(ECS *ecs, const char *name);
 void Manager_UnregisterSystem(ECS *ecs, SystemInfo *system);
 
+void Manager_UpdateCollections(ECS *ecs, Entity *entity);
 bool Manager_ShouldSystemQueueEntity(ECS *ecs, SystemInfo *sys, Entity *entity);
 void Manager_UpdateSystem(ECS *ecs, SystemInfo *info, Entity *entity);
 void Manager_SystemEvent(ECS *ecs, SystemInfo *info, Event *event);

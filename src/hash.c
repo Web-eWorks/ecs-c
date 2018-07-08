@@ -103,10 +103,6 @@ void ht_free(hashtable_t *ht)
 {
 	assert(ht);
 
-	// We won't free the hashtable unless all of the entries have been deleted,
-	// as this would potentially leave dangling pointers.
-	if (ht->count != 0) return;
-
 	// free the bucket array and the hashtable structure.
 	if (ht->buckets) free(ht->buckets);
 	if (ht->storage) mp_destroy(ht->storage);

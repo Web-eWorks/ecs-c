@@ -4,10 +4,12 @@
 
 ECS* ECS_New()
 {
-	// Default allocation granularity
+	// Default allocation granularity.
+	// Each application should perform their own testing, but these are the best
+	// values found for the test harness application.
 	const ECS_AllocInfo alloc = {
 		// Components and entities
-		1024, 1024,
+		256, 256,
 		// Systems and component types
 		64, 64,
 		// Number of components / entity
@@ -17,7 +19,6 @@ ECS* ECS_New()
 	};
 	return ECS_CustomNew(&alloc);
 }
-
 
 ECS* ECS_CustomNew(const ECS_AllocInfo *alloc)
 {
@@ -32,7 +33,7 @@ ECS* ECS_CustomNew(const ECS_AllocInfo *alloc)
 	ecs->_last_entity = 1;
 
 	ecs->systems = ht_alloc(alloc->systems, sizeof(SystemInfo));
-	dyn_alloc(&ecs->update_systems, alloc->systems, sizeof(hash_t));
+	dyn_alloc(&ecs->update_systems, alloc->systems, sizeof(SystemInfo *));
 	ecs->_last_system = 1;
 
 	ecs->cm_types = ht_alloc(alloc->cm_types, sizeof(ComponentType));
@@ -45,14 +46,15 @@ void ECS_Delete(ECS *ecs)
 {
 	assert(ecs);
 
+	// Deleting entities will delete all attached components, which make up
+	// the extreme majority of all components.
 	HT_FOR(ecs->entities, 0) {
 		Entity *entity = ht_get(ecs->entities, idx);
 		if (entity) ECS_EntityDelete(entity);
 	}
 	ht_free(ecs->entities);
 
-	// In most usage scenarios, deleting entities will delete all attached
-	// components, which make up the extreme majority of all components.
+	// There are only a handful of component deletions to perform at this point.
 	HT_FOR(ecs->components, 0) {
 		ComponentInfo *comp = ht_get(ecs->components, idx);
 		if (comp) ECS_ComponentDelete(ecs, comp);
@@ -84,52 +86,39 @@ void ECS_Delete(ECS *ecs)
 // Create entity queues for each system, resolve the order of systems, etc.
 bool ECS_UpdateBegin(ECS *ecs)
 {
+	PERF_START();
+
 	// Iterate systems.
 	HT_FOR(ecs->systems, 0) {
 		SystemInfo *system = ht_get(ecs->systems, idx);
 		// queue the system for updates
-		dyn_insert(&ecs->update_systems, ecs->update_systems.size, &idx);
-		// clear the system's entity queue (should already be clear).
-		while (system->ent_queue.size > 0) dyn_delete(&system->ent_queue, -1);
+		dyn_insert(&ecs->update_systems, ecs->update_systems.size, &system);
 	}
 
 	// TODO: allow systems to define their order of execution.
 	// TODO: handle circular referencing in the systems.
 	// TODO: maybe make system ordering an issue of the caller?
 
-	HT_FOR(ecs->entities, 0) {
-		// TODO: find an algorithm for this that isn't O(NxMxO), or at least do it less often.
-		// Maybe when an entity has changed components, mark it dirty?
-		Entity *entity = ht_get(ecs->entities, idx);
-
-		HT_FOR(ecs->systems, 0) {
-			SystemInfo *system = ht_get(ecs->systems, idx);
-
-			// Check if we should queue the entity
-			if (Manager_ShouldSystemQueueEntity(ecs, system, entity)) {
-				dyn_insert(&system->ent_queue, system->ent_queue.size, &entity->id);
-			}
-		}
-	}
+	PERF_PRINT_MS("UpdateBegin");
 
 	return true;
 }
 
 static void ECS_UpdateSystem(ECS *ecs, SystemInfo *system)
 {
-	// If the system wants components, go through all the queued entities
-	// and call the update function on each set of components.
-	if (system->collection.size > 0) {
-		for (size_t idx = 0; idx < system->ent_queue.size; idx++) {
-			hash_t ent_hash = *(hash_t *)dyn_get(&system->ent_queue, idx);
+	PERF_START();
 
-			Entity *entity = ht_get(ecs->entities, ent_hash);
+	// Update the system with all entities that have the correct components.
+	if (system->collection.size > 0) {
+		HT_FOR(system->ent_queue, 0) {
+			hash_t *ent_hash = ht_get(system->ent_queue, idx);
+			Entity *entity = ht_get(ecs->entities, *ent_hash);
 			if (!entity) continue;
 
 			Manager_UpdateSystem(ecs, system, entity);
 		}
 	}
-	// If the system doesn't want any components, we only update it once.
+	// If the system operate on components, we only update it once.
 	else {
 		system->up_func(NULL, system->udata);
 	}
@@ -141,6 +130,7 @@ static void ECS_UpdateSystem(ECS *ecs, SystemInfo *system)
 			EventQueue_Pop(system->ev_queue, NULL);
 		}
 	}
+	PERF_PRINT_CUSTOM(TIME_FACTOR_MS, "UpdateSystem: %s took %.2fms to complete.\n", system->name);
 }
 
 //
@@ -156,5 +146,7 @@ bool ECS_UpdateSystems(ECS *ecs)
 
 void ECS_UpdateEnd(ECS *ecs)
 {
+	PERF_START();
 
+	PERF_PRINT_MS("UpdateEnd");
 }

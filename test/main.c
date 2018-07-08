@@ -48,14 +48,7 @@ const char* TestSystem_collection[2] = {
 
 int main (int argc, const char **argv)
 {
-#if 0
-	const ECS_AllocInfo alloc = {
-		4096, 4096, 64, 64, 8, 4096
-	};
-	ECS *ecs = ECS_CustomNew(&alloc);
-#else
 	ECS *ecs = ECS_New();
-#endif
 
 	PERF_START();
 	bool res = REGISTER_COMPONENT(ecs, TestComponent);
@@ -65,8 +58,8 @@ int main (int argc, const char **argv)
 	res = REGISTER_SYSTEM(ecs, TestSystem, test_sys);
 	assert(res);
 
-	PERF_PRINT_US("Registration");
-	printf("Initialization done (1/4).\n");
+	PERF_PRINT_US("Initialization");
+	printf("> Initialization done (1/4).\n");
 
 	PERF_UPDATE();
 	ComponentInfo *comp;
@@ -82,12 +75,7 @@ int main (int argc, const char **argv)
 	}
 
 	PERF_PRINT_MS("Entity Creation");
-	char *str = (char *)ECS_ComponentToString(ecs, comp);
-	printf("Testing component ToString: %s\n", str); free(str);
-	str = (char *)ECS_EntityToString(entity);
-	printf("Testing entity ToString: %s\n", str); free(str);
-
-	printf("Setup done (2/4).\n");
+	printf("> Setup done (2/4).\n");
 
 	PERF_UPDATE();
 	ECS_UpdateBegin(ecs);
@@ -95,20 +83,16 @@ int main (int argc, const char **argv)
 	ECS_UpdateSystems(ecs);
 
 	ECS_UpdateEnd(ecs);
-	PERF_PRINT_MS("Update Cycle");
+	PERF_PRINT_MS("One cycle");
 
-	printf("Update done (3/4).\n");
-
-	PERF_UPDATE();
-	ECS_SystemUnregister(ecs, "TestSystem");
-	free(test_sys);
-	PERF_PRINT_US("Unregister TestSystem");
+	printf("> Update done (3/4).\n");
 
 	PERF_UPDATE();
 	ECS_Delete(ecs);
-	PERF_PRINT_MS("Delete ECS");
+	free(test_sys);
+	PERF_PRINT_MS("Shutdown");
 
-	printf("Shutdown done (4/4).\n");
+	printf("> Shutdown done (4/4).\n");
 
 	return 0;
 }

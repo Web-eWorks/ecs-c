@@ -43,6 +43,10 @@ bool ECS_EntityAddComponent(Entity *entity, ComponentInfo *comp)
 
 	comp->owner = entity;
 	dyn_insert(&entity->components, entity->components.size, &comp->id);
+	// We do this at the AddComponent / RemoveComponent step to gain performance.
+	// Adding components to entities takes about 1.5x the time, but it gains an immense
+	// amount of performance on the update step.
+	Manager_UpdateCollections(entity->ecs, entity);
 
 	return true;
 }
@@ -92,4 +96,6 @@ void ECS_EntityRemoveComponent(Entity *entity, hash_t hash)
 
 	dyn_swap(&entity->components, idx, -1);
 	dyn_delete(&entity->components, -1);
+
+	Manager_UpdateCollections(entity->ecs, entity);
 }
