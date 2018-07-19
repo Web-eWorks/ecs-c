@@ -3,19 +3,16 @@
 #include "component.h"
 #include "manager.h"
 
-ComponentInfo* ECS_ComponentNew(ECS *ecs, const char *type)
+ComponentInfo* ECS_ComponentNew(ECS *ecs, hash_t type)
 {
 	assert(ecs && type);
 
 	ComponentType* comp_type = Manager_GetComponentType(ecs, type);
-	if (comp_type == NULL) {
-		fprintf(stderr, "Error: no such component type %s.\n", type);
-		return NULL;
-	}
+	if (comp_type == NULL) return NULL;
 
 	ComponentInfo *comp = Manager_CreateComponent(ecs, comp_type);
 	if (comp == NULL) {
-		fprintf(stderr, "Error: could not create component of type %s.\n", type);
+		fprintf(stderr, "Error: could not create component of type %s.\n", comp_type->type);
 		return NULL;
 	}
 

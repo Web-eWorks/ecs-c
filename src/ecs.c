@@ -11,7 +11,7 @@ ECS* ECS_New()
 		// Components and entities
 		256, 256,
 		// Systems and component types
-		64, 64,
+		32, 32,
 		// Number of components / entity
 		16,
 		// Number of entities systems will operate on.
@@ -25,63 +25,141 @@ ECS* ECS_CustomNew(const ECS_AllocInfo *alloc)
 	assert(alloc);
 
 	ECS *ecs = malloc(sizeof(ECS));
+	if (!ecs) return NULL;
+
+	// Properly free all memory if we can't create the ECS.
+	bool ok = true;
 
 	ecs->components = ht_alloc(alloc->components, sizeof(ComponentInfo));
 	ecs->_last_component = 1;
+	ok = ok && ecs->components;
 
 	ecs->entities = ht_alloc(alloc->entities, sizeof(Entity));
 	ecs->_last_entity = 1;
+	ok = ok && ecs->entities;
 
-	ecs->systems = ht_alloc(alloc->systems, sizeof(SystemInfo));
-	dyn_alloc(&ecs->update_systems, alloc->systems, sizeof(SystemInfo *));
+	ecs->systems = ht_alloc(alloc->systems, sizeof(System));
+	ok = ok && ecs->systems;
 	ecs->_last_system = 1;
+	ok = ok && dyn_alloc(&ecs->update_systems, alloc->systems, sizeof(System *));
 
 	ecs->cm_types = ht_alloc(alloc->cm_types, sizeof(ComponentType));
 	ecs->alloc_info = *alloc;
+	ok = ok && ecs->cm_types;
+
+	ecs->num_threads = 0;
+	ecs->threads = NULL;
+
+	ok = ok && pthread_mutex_init(&ecs->global_lock, NULL) == 0;
+	ok = ok && pthread_cond_init(&ecs->ready_cond, NULL) == 0;
+
+	ecs->is_updating = false;
+
+	if (!ok) {
+		ECS_Delete(ecs);
+		return NULL;
+	}
 
 	return ecs;
+}
+
+bool ECS_SetThreads(ECS *ecs, size_t threads)
+{
+	assert(ecs && !ecs->is_updating);
+
+	// TODO: create and spawn threads.
+	int nthreads = threads - ecs->num_threads;
+	if (nthreads <= 0) {
+		ECS_UNLOCK(ecs);
+		return true;
+	}
+
+	ThreadData **ptr = realloc(ecs->threads, sizeof(ThreadData *) * threads);
+	if (!ptr) return false;
+	for (size_t idx = ecs->num_threads; idx < threads; idx++) {
+		ThreadData *data = ptr[idx] = malloc(sizeof(ThreadData));
+		if (!data) {
+			ECS_Error(ecs, "Could not allocate memory for new threads!");
+			return false;
+		}
+
+		data->ecs = ecs;
+		data->running = false;
+		data->ready = false;
+		pthread_mutex_init(&data->update_mutex, NULL);
+		pthread_cond_init(&data->update_cond, NULL);
+		pthread_create(&data->thread, NULL, &UpdateThread_main, data);
+	}
+
+	ecs->num_threads = threads;
+	ecs->threads = ptr;
+
+	return true;
 }
 
 void ECS_Delete(ECS *ecs)
 {
 	assert(ecs);
 
+	if (ecs->num_threads > 0 && ecs->threads) {
+		for (size_t idx = 0; idx < ecs->num_threads; idx++) {
+			pthread_cancel(ecs->threads[idx]->thread);
+			pthread_join(ecs->threads[idx]->thread, NULL);
+			ThreadData_delete(ecs->threads[idx]);
+			free(ecs->threads[idx]);
+		}
+		free(ecs->threads);
+	}
+
 	// Deleting entities will delete all attached components, which make up
 	// the extreme majority of all components.
-	HT_FOR(ecs->entities, 0) {
-		Entity *entity = ht_get(ecs->entities, idx);
-		if (entity) ECS_EntityDelete(entity);
+	if (ecs->entities) {
+		HT_FOR(ecs->entities, 0) {
+			Entity *entity = ht_get(ecs->entities, idx);
+			if (entity) ECS_EntityDelete(entity);
+		}
+		ht_free(ecs->entities);
 	}
-	ht_free(ecs->entities);
 
 	// There are only a handful of component deletions to perform at this point.
-	HT_FOR(ecs->components, 0) {
-		ComponentInfo *comp = ht_get(ecs->components, idx);
-		if (comp) ECS_ComponentDelete(ecs, comp);
+	if (ecs->components) {
+		HT_FOR(ecs->components, 0) {
+			ComponentInfo *comp = ht_get(ecs->components, idx);
+			if (comp) ECS_ComponentDelete(ecs, comp);
+		}
+		ht_free(ecs->components);
 	}
-	ht_free(ecs->components);
 
-	HT_FOR(ecs->systems, 0) {
-		SystemInfo *system = ht_get(ecs->systems, idx);
-		if (system) Manager_UnregisterSystem(ecs, system);
+	if (ecs->systems) {
+		HT_FOR(ecs->systems, 0) {
+			System *system = ht_get(ecs->systems, idx);
+			if (system) Manager_UnregisterSystem(ecs, system);
+		}
+		ht_free(ecs->systems);
 	}
-	ht_free(ecs->systems);
 	dyn_free(&ecs->update_systems);
 
-	HT_FOR(ecs->cm_types, 0) {
-		ComponentType *type = ht_get(ecs->cm_types, idx);
-		if (type) {
-			mp_destroy(type->components);
-			free((char *)type->type);
-			ht_delete(ecs->cm_types, idx);
+	if (ecs->cm_types) {
+		HT_FOR(ecs->cm_types, 0) {
+			ComponentType *type = ht_get(ecs->cm_types, idx);
+			if (type) {
+				mp_destroy(type->components);
+				free((char *)type->type);
+				ht_delete(ecs->cm_types, idx);
+			}
 		}
+		ht_free(ecs->cm_types);
 	}
-	ht_free(ecs->cm_types);
 
 	free(ecs);
 }
 
-#include <time.h>
+void ECS_Error(ECS *ecs, const char *error)
+{
+	ECS_LOCK(ecs);
+	fprintf(stderr, "%s\n", error);
+	ECS_UNLOCK(ecs);
+}
 
 // Create entity queues for each system, resolve the order of systems, etc.
 bool ECS_UpdateBegin(ECS *ecs)
@@ -90,7 +168,7 @@ bool ECS_UpdateBegin(ECS *ecs)
 
 	// Iterate systems.
 	HT_FOR(ecs->systems, 0) {
-		SystemInfo *system = ht_get(ecs->systems, idx);
+		System *system = ht_get(ecs->systems, idx);
 		// queue the system for updates
 		dyn_insert(&ecs->update_systems, ecs->update_systems.size, &system);
 	}
@@ -99,28 +177,107 @@ bool ECS_UpdateBegin(ECS *ecs)
 	// TODO: handle circular referencing in the systems.
 	// TODO: maybe make system ordering an issue of the caller?
 
-	PERF_PRINT_MS("UpdateBegin");
+	// PERF_PRINT_MS("UpdateBegin");
 
 	return true;
 }
 
-static void ECS_UpdateSystem(ECS *ecs, SystemInfo *system)
+#define THREAD_MIN_LOAD 100
+
+// wait for all threads to finish
+static void synchronize_threads(ECS *ecs)
+{
+	for (size_t thread = 0; thread < ecs->num_threads; thread++) {
+		ThreadData *data = ecs->threads[thread];
+		pthread_mutex_t *mtx = &data->update_mutex;
+
+		while (true) {
+			pthread_mutex_lock(mtx);
+			bool ok = data->ready;
+			pthread_mutex_unlock(mtx);
+			if (ok) break;
+
+			pthread_mutex_lock(&ecs->global_lock);
+			pthread_cond_wait(&ecs->ready_cond, &ecs->global_lock);
+			pthread_mutex_unlock(&ecs->global_lock);
+		}
+		pthread_mutex_unlock(mtx);
+	}
+}
+
+// TODO: optimize this (or callers) to reduce time spend waiting on threads.
+static void distribute_to_thread(ECS *ecs, ThreadData *thread, System *system, hash_t start, hash_t end)
+{
+	pthread_mutex_lock(&thread->update_mutex);
+
+	// Pass along the data.
+	thread->system = system;
+	thread->range.start = start;
+	thread->range.end = end;
+	thread->ready = false;
+
+	// Let it get to work.
+	pthread_cond_signal(&thread->update_cond);
+	pthread_mutex_unlock(&thread->update_mutex);
+}
+
+// TODO: we assume all threads are ready here - rewrite this to support unready
+// threads from multiple-system queueing.
+void ECS_DistributeSystemUpdate(ECS *ecs, System *system)
+{
+	size_t ents = ht_len(system->ent_queue) / ecs->num_threads;
+
+	// If we don't have enough to justify queuing to more than one thread, (or
+	// only have one thread) just dispatch the queue.
+	if (system->collection.size == 0 || ecs->num_threads == 1 || ents < THREAD_MIN_LOAD) {
+		distribute_to_thread(ecs, ecs->threads[0], system, 0, ~0);
+		return;
+	}
+
+	size_t ctr = 0;
+	size_t thread = 0;
+	hash_t last = 0;
+	hash_t curr = 0;
+
+	PERF_START();
+	HT_FOR(system->ent_queue, 0) {
+		if (++ctr < ents) {
+			curr = idx;
+			continue;
+		}
+		if (thread == ecs->num_threads - 1) idx = 0;
+		distribute_to_thread(ecs, ecs->threads[thread], system, last, idx);
+		// PERF_PRINT_CUSTOM(TIME_FACTOR_MS, "Distribute updates to thread %p took %.2fms.\n",
+		// 	ecs->threads[thread]);
+		PERF_UPDATE();
+		last = curr;
+		curr = idx;
+		ctr = 0;
+		thread++;
+		if (thread == ecs->num_threads) break;
+	}
+}
+
+// Update a single system.
+static void ECS_UpdateSystem(ECS *ecs, System *system)
 {
 	PERF_START();
 
+	if (ecs->num_threads > 0 && system->is_thread_safe) {
+		ECS_DistributeSystemUpdate(ecs, system);
+	}
 	// Update the system with all entities that have the correct components.
-	if (system->collection.size > 0) {
+	else if (system->collection.size > 0) {
 		HT_FOR(system->ent_queue, 0) {
-			hash_t *ent_hash = ht_get(system->ent_queue, idx);
-			Entity *entity = ht_get(ecs->entities, *ent_hash);
+			Entity *entity = ht_get(ecs->entities, idx);
 			if (!entity) continue;
 
 			Manager_UpdateSystem(ecs, system, entity);
 		}
 	}
-	// If the system operate on components, we only update it once.
+	// If the system doesn't operate on components, we only update it once.
 	else {
-		system->up_func(NULL, system->udata);
+		Manager_UpdateSystem(ecs, system, NULL);
 	}
 
 	if (system->ev_func) {
@@ -130,16 +287,42 @@ static void ECS_UpdateSystem(ECS *ecs, SystemInfo *system)
 			EventQueue_Pop(system->ev_queue, NULL);
 		}
 	}
-	PERF_PRINT_CUSTOM(TIME_FACTOR_MS, "UpdateSystem: %s took %.2fms to complete.\n", system->name);
+
+	// PERF_PRINT_CUSTOM(TIME_FACTOR_MS, "UpdateSystem: %s took %.2fms to complete.\n", system->name);
 }
 
-//
+/*
+	Each system (nominally) updates on one entity at a time, and then only on
+	certain components on those entities.
+
+	Each system, when registered, should provide data regarding what components
+	they read from or write to, as well as if they access other entities. Systems
+	can also specify if they want to run before or after other systems by name.
+
+	The ECS will then resolve the order of execution of systems. The ECS may
+	schedule two systems simultaneously if they are not dependant upon each other
+	and do not involve the same components.
+
+	Each system's update function will be called for each valid entity the system
+	operates on. The system update is not guaranteed to take place on the main
+	(or same) thread, nor is it guaranteed to happen in isolation - multiple
+	entities may be updated at the same time on different threads.
+
+	To preserve performance and avoid race conditions or other threading bugs,
+	when updating entities, entity creation and deletion must be queued in a
+	command buffer until a synchronization point is reached in the update cycle.
+*/
 bool ECS_UpdateSystems(ECS *ecs)
 {
+	PERF_START();
 	HT_FOR(ecs->systems, 0) {
-		SystemInfo *system = ht_get(ecs->systems, idx);
+		System *system = ht_get(ecs->systems, idx);
 		ECS_UpdateSystem(ecs, system);
+		if (ecs->num_threads > 0) {
+			synchronize_threads(ecs);
+		}
 	}
+	// PERF_PRINT_MS("UpdateSystems");
 
 	return true;
 }
@@ -148,5 +331,5 @@ void ECS_UpdateEnd(ECS *ecs)
 {
 	PERF_START();
 
-	PERF_PRINT_MS("UpdateEnd");
+	// PERF_PRINT_MS("UpdateEnd");
 }

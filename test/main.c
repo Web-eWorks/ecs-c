@@ -24,26 +24,39 @@ const char* TestComponent_GetString(TestComponent *comp)
 }
 
 SYSTEM_IMPL(TestSystem)
-void TestSystem_update(Component **c, TestSystem *system)
+void TestSystem_update(Entity *e, ComponentInfo **c, TestSystem *system)
 {
+	// This will always assert true, but we check it here anyways.
+	assert(c[0] && c[0]->owner == e && c[0]->component);
+
 	// Since we returned "TestComponent" as element 0 in TestSystem_collection,
-	// c[0] will _always_ be a TestComponent pointer, and thus it is safe to
-	// cast like this.
-	TestComponent *comp = c[0];
-	assert(comp && comp->string);
+	// c[0]->component will always be a TestComponent pointer, and thus it is
+	// safe to cast like this.
+	TestComponent *comp = c[0]->component;
+	assert(comp->string);
 }
 bool TestSystem_event(Event *event, TestSystem *system)
 {
 	return false;
 }
 
-const char* TestSystem_collection[2] = {
+const char *TestSystem_collection[2] = {
 	"TestComponent",
 	NULL
 };
 
+const SystemUpdateInfo TestSystem_update_info = {
+	true, false,
+	NULL, NULL,
+	TestSystem_collection
+};
+
+#ifndef TEST_ENTITIES
+#define TEST_ENTITIES 100000
+#endif
+
 #ifndef TEST_REPS
-#define TEST_REPS 64000
+#define TEST_REPS 10
 #endif
 
 int main (int argc, const char **argv)
@@ -58,14 +71,18 @@ int main (int argc, const char **argv)
 	res = REGISTER_SYSTEM(ecs, TestSystem, test_sys);
 	assert(res);
 
+	res = ECS_SetThreads(ecs, 4);
+	assert(res);
+
 	PERF_PRINT_US("Initialization");
 	printf("> Initialization done (1/4).\n");
 
 	PERF_UPDATE();
 	ComponentInfo *comp;
 	Entity *entity;
-	for (int i = 0; i < TEST_REPS; i++) {
-		comp = ECS_ComponentNew(ecs, "TestComponent");
+	hash_t comp_type = COMPONENT_ID(TestComponent);
+	for (int i = 0; i < TEST_ENTITIES; i++) {
+		comp = ECS_ComponentNew(ecs, comp_type);
 		assert(comp);
 		entity = ECS_EntityNew(ecs);
 		assert(entity);
@@ -78,12 +95,14 @@ int main (int argc, const char **argv)
 	printf("> Setup done (2/4).\n");
 
 	PERF_UPDATE();
-	ECS_UpdateBegin(ecs);
+	for (int i = 0; i < TEST_REPS; i++) {
+		ECS_UpdateBegin(ecs);
 
-	ECS_UpdateSystems(ecs);
+		ECS_UpdateSystems(ecs);
 
-	ECS_UpdateEnd(ecs);
-	PERF_PRINT_MS("One cycle");
+		ECS_UpdateEnd(ecs);
+	}
+	PERF_PRINT_MS("Updates");
 
 	printf("> Update done (3/4).\n");
 

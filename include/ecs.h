@@ -22,8 +22,10 @@ typedef struct ComponentInfo ComponentInfo;
 
 typedef struct Entity Entity;
 
-typedef void System;
-typedef struct SystemInfo SystemInfo;
+/*
+    An encapsulation of update code.
+*/
+typedef struct System System;
 
 /*
     The core datastructure of the ECS.
@@ -66,6 +68,14 @@ typedef struct {
 ECS* ECS_New();
 ECS* ECS_CustomNew(const ECS_AllocInfo *alloc);
 void ECS_Delete(ECS *ecs);
+
+/*
+    Sets the number of threads the ECS will use for system updates.
+
+    This function will only increase the number of threads; subsequent calls
+    with a lower number will not delete spawned threads.
+*/
+bool ECS_SetThreads(ECS *ecs, size_t threads);
 
 /*
     Trigger an ECS update.

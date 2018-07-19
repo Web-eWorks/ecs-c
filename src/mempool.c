@@ -56,6 +56,9 @@ mempool_t* mp_init(size_t min_size, size_t entry_size)
 
     // Must have at least the size of a void* to store the header.
     entry_size = entry_size > sizeof(void *) ? entry_size : sizeof(void *);
+    // Align to 8 bytes
+    if (entry_size % 8) entry_size += 8 - entry_size % 8;
+    assert(entry_size % 8 == 0);
 
     mempool_t *mp = malloc(sizeof(mempool_t) + min_size * entry_size);
     if (!mp) return NULL;

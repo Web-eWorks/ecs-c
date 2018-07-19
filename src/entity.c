@@ -66,7 +66,8 @@ ComponentInfo* ECS_EntityGetComponentOfType(Entity *entity, hash_t type, size_t 
 	assert(entity && entity->ecs && type);
 
 	size_t found_count = 0;
-	for (size_t idx = 0; idx < entity->components.size; idx++) {
+	size_t components = entity->components.size;
+	for (size_t idx = 0; idx < components; idx++) {
 		hash_t *hash = dyn_get(&entity->components, idx);
 		ComponentInfo *comp = Manager_GetComponent(entity->ecs, *hash);
 		if (!comp || comp->type != type) continue;

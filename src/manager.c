@@ -1,11 +1,11 @@
 #include "manager.h"
 
 // Get a component type's info.
-ComponentType* Manager_GetComponentType(ECS *ecs, const char *type)
+ComponentType* Manager_GetComponentType(ECS *ecs, hash_t type)
 {
 	assert(ecs && type);
 
-	return ht_get(ecs->cm_types, hash_string(type));
+	return ht_get(ecs->cm_types, type);
 }
 
 // Registers a new component type.
@@ -39,7 +39,7 @@ ComponentInfo* Manager_CreateComponent(ECS *ecs, ComponentType *type)
 	assert(ecs && type);
 
 	// Create the ComponentInfo
-	hash_t c_id = ecs->_last_component++;
+	hash_t c_id = ht_get_free(ecs->components);
 	ComponentInfo *info = ht_insert(ecs->components, c_id, NULL);
 	if (!info) return NULL;
 
@@ -93,7 +93,7 @@ void Manager_DeleteComponent(ECS *ecs, ComponentInfo *comp)
 Entity* Manager_CreateEntity(ECS *ecs)
 {
 	assert(ecs);
-	const hash_t ent_id = ecs->_last_entity++;
+	const hash_t ent_id = ht_get_free(ecs->entities);
 
 	Entity *entity = ht_insert(ecs->entities, ent_id, NULL);
 	if (entity == NULL) return NULL;
@@ -132,7 +132,7 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity)
 
 	// Remove the entity from the system's queue.
 	HT_FOR(ecs->systems, 0) {
-		SystemInfo *system = ht_get(ecs->systems, idx);
+		System *system = ht_get(ecs->systems, idx);
 		ht_delete(system->ent_queue, entity->id);
 	}
 
@@ -142,14 +142,14 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity)
 
 /* -------------------------------------------------------------------------- */
 
-bool Manager_RegisterSystem(ECS *ecs, SystemInfo *info)
+bool Manager_RegisterSystem(ECS *ecs, System *info)
 {
 	assert(ecs && ecs->systems && info);
 
 	info->ent_queue = ht_alloc(128, sizeof(hash_t));
 	if (!info->ent_queue) return false;
 
-	SystemInfo *_info = ht_insert(ecs->systems, hash_string(info->name), info);
+	System *_info = ht_insert(ecs->systems, hash_string(info->name), info);
 
 	if (!_info) {
 		free((char *)info->name);
@@ -161,14 +161,14 @@ bool Manager_RegisterSystem(ECS *ecs, SystemInfo *info)
 	return _info ? true : false;
 }
 
-SystemInfo* Manager_GetSystem(ECS *ecs, const char *name)
+System* Manager_GetSystem(ECS *ecs, const char *name)
 {
 	assert(ecs && ecs->systems && name);
 
 	return ht_get(ecs->systems, hash_string(name));
 }
 
-void Manager_UnregisterSystem(ECS *ecs, SystemInfo *system)
+void Manager_UnregisterSystem(ECS *ecs, System *system)
 {
 	assert(ecs && ecs->systems && system);
 
@@ -183,7 +183,7 @@ void Manager_UnregisterSystem(ECS *ecs, SystemInfo *system)
 void Manager_UpdateCollections(ECS *ecs, Entity *entity)
 {
 	HT_FOR(ecs->systems, 0) {
-		SystemInfo *system = ht_get(ecs->systems, idx);
+		System *system = ht_get(ecs->systems, idx);
 		if (Manager_ShouldSystemQueueEntity(ecs, system, entity)) {
 			ht_insert(system->ent_queue, entity->id, &entity->id);
 		}
@@ -193,7 +193,7 @@ void Manager_UpdateCollections(ECS *ecs, Entity *entity)
 	}
 }
 
-bool Manager_ShouldSystemQueueEntity(ECS *ecs, SystemInfo *system, Entity *entity)
+bool Manager_ShouldSystemQueueEntity(ECS *ecs, System *system, Entity *entity)
 {
 	assert(ecs && system && entity);
 
@@ -211,7 +211,7 @@ bool Manager_ShouldSystemQueueEntity(ECS *ecs, SystemInfo *system, Entity *entit
 	return should_queue;
 }
 
-void Manager_UpdateSystem(ECS *ecs, SystemInfo *system, Entity *entity)
+void Manager_UpdateSystem(ECS *ecs, System *system, Entity *entity)
 {
 	assert(ecs && system && system->collection.size > 0 && entity);
 
@@ -220,13 +220,13 @@ void Manager_UpdateSystem(ECS *ecs, SystemInfo *system, Entity *entity)
 	for (size_t idx = 0; idx < system->collection.size; idx++) {
 		ComponentInfo *comp = ECS_EntityGetComponentOfType(
 			entity, system->collection.types[idx], 0);
-		system->collection.comps[idx] = comp->component;
+		system->collection.comps[idx] = comp;
 	}
 
-	system->up_func(system->collection.comps, system->udata);
+	system->up_func(entity, system->collection.comps, system->udata);
 }
 
-void Manager_SystemEvent(ECS *ecs, SystemInfo *system, Event *ev)
+void Manager_SystemEvent(ECS *ecs, System *system, Event *ev)
 {
 	assert(ecs && system && ev);
 	if (!system->ev_func) return;

@@ -50,6 +50,9 @@ struct hashtable_t {
 	size_t entry_size;
 	size_t data_size;
 	size_t count;
+
+	// Some bookkeeping to speed up calls to ht_next and ht_next_free.
+	hash_t first_free;
 	mempool_t *storage;
 	bucket_t **buckets;
 };
@@ -83,6 +86,7 @@ hashtable_t* ht_alloc(size_t size, size_t val_size)
 	ht->size = size == 0 ? 16 : size;
 	ht->data_size = val_size;
 	ht->entry_size = sizeof(bucket_t) + val_size;
+	ht->first_free = 1;
 
 	// There will always be room for at least ht->size entries in the table.
 	// As a consequence, LOAD_MAX must never be > 1.0.
@@ -184,16 +188,24 @@ void* ht_insert(hashtable_t *ht, hash_t hash, void *data)
 	else
 		memset(entry->data, 0, ht->data_size);
 
+	// Update the first_free ptr if necessary.
+	if (ht->first_free == hash) ht->first_free = ht_next_free(ht, hash);
+
 	// Return the pointer to the new data.
 	return entry->data;
 }
 
 void* ht_get(hashtable_t *ht, hash_t hash)
 {
-	assert(ht && ht->buckets && ht->storage);
+	//assert(ht && ht->buckets && ht->storage);
 
 	bucket_t *ht_ent = get_entry(ht, hash);
 	return ht_ent ? ht_ent->data : NULL;
+}
+
+size_t ht_len(hashtable_t *ht)
+{
+	return ht->count;
 }
 
 // Get the next hashtable entry after the current.
@@ -202,6 +214,7 @@ hash_t ht_next(hashtable_t *ht, hash_t hash)
 {
 	assert(ht && ht->buckets && ht->storage);
 
+	// If there are no more entries in the table, skip out early.
 	if (ht->count < 1) return 0;
 
 	size_t idx = get_bucket_idx(ht, hash);
@@ -235,6 +248,21 @@ hash_t ht_next(hashtable_t *ht, hash_t hash)
 	return 0;
 }
 
+hash_t ht_get_free(hashtable_t *ht)
+{
+	assert(ht && ht->buckets && ht->storage);
+
+	return ht->first_free;
+}
+
+hash_t ht_next_free(hashtable_t *ht, hash_t idx)
+{
+	assert(ht && ht->buckets && ht->storage);
+
+	while(get_entry(ht, ++idx)) continue;
+	return idx;
+}
+
 void ht_delete(hashtable_t *ht, hash_t hash)
 {
 	assert(ht && ht->buckets && ht->storage);
@@ -257,4 +285,7 @@ void ht_delete(hashtable_t *ht, hash_t hash)
 	// Deallocate the block.
 	mp_free(ht->storage, entry);
 	ht->count--;
+
+	// Update the first_free ptr if we're deleting something below it.
+	if (ht->first_free > hash && hash != 0) ht->first_free = hash;
 }

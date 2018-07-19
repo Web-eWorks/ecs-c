@@ -22,7 +22,7 @@ struct ComponentInfo {
 	Initializes a new component, sets up the ComponentInfo, and returns a
 	pointer to the new component.
 */
-ComponentInfo* ECS_ComponentNew(ECS *ecs, const char *type);
+ComponentInfo* ECS_ComponentNew(ECS *ecs, hash_t type);
 
 /*
 	Get a component by it's id.
@@ -129,5 +129,7 @@ bool ECS_HasComponentType(ECS *ecs, const char *type);
 
 #define REGISTER_COMPONENT(ECS, T) \
 	(ECS_ComponentRegisterType(ECS, #T, T##_cr, T##_dl, sizeof(T)))
+
+#define COMPONENT_ID(T) hash_string(#T)
 
 #endif
