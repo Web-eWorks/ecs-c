@@ -48,6 +48,7 @@ ECS* ECS_CustomNew(const ECS_AllocInfo *alloc)
 	ok = ok && ecs->cm_types;
 
 	ecs->num_threads = 0;
+	ecs->ready_threads = 0;
 	ecs->threads = NULL;
 
 	ok = ok && pthread_mutex_init(&ecs->global_lock, NULL) == 0;
@@ -160,8 +161,6 @@ void ECS_Error(ECS *ecs, const char *error)
 // Create entity queues for each system, resolve the order of systems, etc.
 bool ECS_UpdateBegin(ECS *ecs)
 {
-	PERF_START();
-
 	// Iterate systems.
 	HT_FOR(ecs->systems, 0) {
 		System *system = ht_get(ecs->systems, idx);
@@ -173,8 +172,6 @@ bool ECS_UpdateBegin(ECS *ecs)
 	// TODO: handle circular referencing in the systems.
 	// TODO: maybe make system ordering an issue of the caller?
 
-	// PERF_PRINT_MS("UpdateBegin");
-
 	return true;
 }
 
@@ -183,25 +180,16 @@ bool ECS_UpdateBegin(ECS *ecs)
 // wait for all threads to finish
 static void synchronize_threads(ECS *ecs)
 {
-	for (size_t thread = 0; thread < ecs->num_threads; thread++) {
-		ThreadData *data = ecs->threads[thread];
-		pthread_mutex_t *mtx = &data->update_mutex;
-
-		while (true) {
-			pthread_mutex_lock(mtx);
-			bool ok = data->ready;
-			pthread_mutex_unlock(mtx);
-			if (ok) break;
-
-			pthread_mutex_lock(&ecs->global_lock);
-			pthread_cond_wait(&ecs->ready_cond, &ecs->global_lock);
-			pthread_mutex_unlock(&ecs->global_lock);
+	ECS_LOCK(ecs);
+	while (true) {
+		if (ecs->ready_threads == ecs->num_threads) {
+			ECS_UNLOCK(ecs);
+			return;
 		}
-		pthread_mutex_unlock(mtx);
+		pthread_cond_wait(&ecs->ready_cond, &ecs->global_lock);
 	}
 }
 
-// TODO: optimize this (or callers) to reduce time spend waiting on threads.
 static void distribute_to_thread(ECS *ecs, ThreadData *thread, System *system, hash_t start, hash_t end)
 {
 	pthread_mutex_lock(&thread->update_mutex);
@@ -212,6 +200,8 @@ static void distribute_to_thread(ECS *ecs, ThreadData *thread, System *system, h
 	thread->range.end = end;
 	thread->ready = false;
 
+	UNREADY_THREAD(ecs);
+
 	// Let it get to work.
 	pthread_cond_signal(&thread->update_cond);
 	pthread_mutex_unlock(&thread->update_mutex);
@@ -221,51 +211,34 @@ static void distribute_to_thread(ECS *ecs, ThreadData *thread, System *system, h
 // threads from multiple-system queueing.
 void ECS_DistributeSystemUpdate(ECS *ecs, System *system)
 {
-	size_t ents = ht_len(system->ent_queue) / ecs->num_threads;
+	size_t ents = ha_len(system->ent_queue) / ecs->num_threads;
 
 	// If we don't have enough to justify queuing to more than one thread, (or
 	// only have one thread) just dispatch the queue.
 	if (system->collection.size == 0 || ecs->num_threads == 1 || ents < THREAD_MIN_LOAD) {
-		distribute_to_thread(ecs, ecs->threads[0], system, 0, ~0);
+		distribute_to_thread(ecs, ecs->threads[0], system, 0, 0);
 		return;
 	}
 
-	size_t ctr = 0;
-	size_t thread = 0;
 	hash_t last = 0;
-	hash_t curr = 0;
-
-	PERF_START();
-	HT_FOR(system->ent_queue, 0) {
-		if (++ctr < ents) {
-			curr = idx;
-			continue;
-		}
-		if (thread == ecs->num_threads - 1) idx = 0;
-		distribute_to_thread(ecs, ecs->threads[thread], system, last, idx);
-		// PERF_PRINT_CUSTOM(TIME_FACTOR_MS, "Distribute updates to thread %p took %.2fms.\n",
-		// 	ecs->threads[thread]);
-		PERF_UPDATE();
+	for (size_t idx = 0; idx < ecs->num_threads; idx++) {
+		hash_t curr = last + ents;
+		distribute_to_thread(ecs, ecs->threads[idx], system, last, curr);
 		last = curr;
-		curr = idx;
-		ctr = 0;
-		thread++;
-		if (thread == ecs->num_threads) break;
 	}
 }
 
 // Update a single system.
 static void ECS_UpdateSystem(ECS *ecs, System *system)
 {
-	PERF_START();
-
 	if (ecs->num_threads > 0 && system->is_thread_safe) {
 		ECS_DistributeSystemUpdate(ecs, system);
 	}
 	// Update the system with all entities that have the correct components.
 	else if (system->collection.size > 0) {
-		HT_FOR(system->ent_queue, 0) {
-			Entity *entity = ha_get(ecs->entities, idx);
+		hash_t *hash;
+		HA_FOR(system->ent_queue, hash, 0) {
+			Entity *entity = ha_get(ecs->entities, *hash);
 			if (!entity) continue;
 
 			Manager_UpdateSystem(ecs, system, entity);
@@ -283,8 +256,6 @@ static void ECS_UpdateSystem(ECS *ecs, System *system)
 			EventQueue_Pop(system->ev_queue, NULL);
 		}
 	}
-
-	// PERF_PRINT_CUSTOM(TIME_FACTOR_MS, "UpdateSystem: %s took %.2fms to complete.\n", system->name);
 }
 
 /*
@@ -310,7 +281,6 @@ static void ECS_UpdateSystem(ECS *ecs, System *system)
 */
 bool ECS_UpdateSystems(ECS *ecs)
 {
-	PERF_START();
 	HT_FOR(ecs->systems, 0) {
 		System *system = ht_get(ecs->systems, idx);
 		ECS_UpdateSystem(ecs, system);
@@ -318,14 +288,11 @@ bool ECS_UpdateSystems(ECS *ecs)
 			synchronize_threads(ecs);
 		}
 	}
-	// PERF_PRINT_MS("UpdateSystems");
 
 	return true;
 }
 
 void ECS_UpdateEnd(ECS *ecs)
 {
-	PERF_START();
-
-	// PERF_PRINT_MS("UpdateEnd");
+	(void) ecs;
 }

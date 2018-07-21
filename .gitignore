@@ -5,5 +5,5 @@
 /compile_commands.json
 /massif.out*
 /memcheck.out*
-/cachegrind.out.*
-/callgrind.out.*
+/cachegrind.out*
+/callgrind.out*

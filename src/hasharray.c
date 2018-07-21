@@ -69,6 +69,7 @@ void* ha_insert(hasharray_t *ha, hash_t idx, void *data) {
         ha->entries[idx] = entry;
     }
 
+    ha->count++;
     if (idx > ha->last_filled) {
         ha->last_filled = idx + 1;
     }
@@ -89,9 +90,14 @@ void* ha_insert_free(hasharray_t *ha, hash_t *idx, void *data)
     assert(ha && ha->entries && ha->storage);
 
     hash_t _idx = ha_first_free(ha);
-    *idx = _idx;
+    if (idx) *idx = _idx;
 
     return ha_insert(ha, _idx, data);
+}
+
+size_t ha_len(hasharray_t *ha)
+{
+    return ha->count;
 }
 
 void* ha_get(hasharray_t *ha, hash_t idx)
@@ -115,7 +121,8 @@ hash_t ha_first_free(hasharray_t *ha)
     assert(ha && ha->entries);
 
     hash_t idx = ha->first_free;
-    if (idx >= ha->capacity || ha->entries[idx]) {
+    if (idx >= ha->capacity) return ha->first_free;
+    else if ( ha->entries[idx]) {
         idx = ha->first_free = ha_next_free(ha, idx);
     }
 
@@ -140,6 +147,7 @@ void ha_delete(hasharray_t *ha, hash_t idx)
 
     mp_free(ha->storage, ha->entries[idx]);
     ha->entries[idx] = NULL;
+    ha->count--;
 
     if (idx < ha->first_free) ha->first_free = idx;
     if (idx == ha->last_filled) ha->last_filled--;

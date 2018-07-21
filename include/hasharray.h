@@ -35,6 +35,11 @@ void* ha_insert(hasharray_t *ha, hash_t idx, void *data);
 void* ha_insert_free(hasharray_t *ha, hash_t *idx, void *data);
 
 /*
+    Returns the number of entries in the table.
+*/
+size_t ha_len(hasharray_t *ha);
+
+/*
     Get a pointer to the element at idx. Returns NULL if there is no element
     present.
 */

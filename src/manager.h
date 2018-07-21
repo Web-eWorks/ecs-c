@@ -37,6 +37,7 @@ struct ECS {
 	bool is_updating;
 
 	size_t num_threads;
+	size_t ready_threads;
 	ThreadData **threads;
 
 	pthread_mutex_t global_lock;
@@ -87,7 +88,7 @@ struct System {
 	hash_t *after_systems;
 
 	EventQueue *ev_queue;
-	hashtable_t *ent_queue;
+	hasharray_t *ent_queue;
 };
 
 struct ComponentType {
@@ -136,5 +137,7 @@ void Manager_SystemEvent(ECS *ecs, System *info, Event *event);
 
 #define ECS_LOCK(ecs) pthread_mutex_lock(&ecs->global_lock);
 #define ECS_UNLOCK(ecs) pthread_mutex_unlock(&ecs->global_lock);
+#define READY_THREAD(ecs) { ECS_LOCK(ecs); (ecs)->ready_threads++; ECS_UNLOCK(ecs); }
+#define UNREADY_THREAD(ecs) { ECS_LOCK(ecs); (ecs)->ready_threads--; ECS_UNLOCK(ecs); }
 
 #endif // ECS_MANAGER_H

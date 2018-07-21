@@ -130,7 +130,7 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity)
 	// Remove the entity from the system's queue.
 	HT_FOR(ecs->systems, 0) {
 		System *system = ht_get(ecs->systems, idx);
-		ht_delete(system->ent_queue, entity->id);
+		ha_delete(system->ent_queue, entity->id);
 	}
 
 	dyn_free(&entity->components);
@@ -143,7 +143,7 @@ bool Manager_RegisterSystem(ECS *ecs, System *info)
 {
 	assert(ecs && ecs->systems && info);
 
-	info->ent_queue = ht_alloc(128, sizeof(hash_t));
+	info->ent_queue = ha_alloc(128, sizeof(hash_t));
 	if (!info->ent_queue) return false;
 
 	System *_info = ht_insert(ecs->systems, hash_string(info->name), info);
@@ -152,7 +152,7 @@ bool Manager_RegisterSystem(ECS *ecs, System *info)
 		free((char *)info->name);
 		free((char *)info->collection.types);
 		free((char *)info->collection.comps);
-		ht_free(info->ent_queue);
+		ha_free(info->ent_queue);
 	}
 
 	return _info ? true : false;
@@ -172,7 +172,7 @@ void Manager_UnregisterSystem(ECS *ecs, System *system)
 	EventQueue_Free(system->ev_queue);
 	free((char *)system->name);
 	System_DeleteCollection(&system->collection);
-	ht_free(system->ent_queue);
+	ha_free(system->ent_queue);
 
 	ht_delete(ecs->systems, system->name_hash);
 }
@@ -182,10 +182,10 @@ void Manager_UpdateCollections(ECS *ecs, Entity *entity)
 	HT_FOR(ecs->systems, 0) {
 		System *system = ht_get(ecs->systems, idx);
 		if (Manager_ShouldSystemQueueEntity(ecs, system, entity)) {
-			ht_insert(system->ent_queue, entity->id, &entity->id);
+			ha_insert_free(system->ent_queue, NULL, &entity->id);
 		}
 		else {
-			ht_delete(system->ent_queue, entity->id);
+			ha_delete(system->ent_queue, entity->id);
 		}
 	}
 }

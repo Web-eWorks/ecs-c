@@ -58,28 +58,37 @@ void* UpdateThread_main(void *arg)
 {
     ThreadData *data = arg;
     data->running = UpdateThread_start(data);
-    printf("Thread spawned!\n");
+    hasharray_t *entities = data->ecs->entities;
 
     // Wait until there's a new system chunk to update.
     while (data->running) {
-        pthread_mutex_lock(&data->update_mutex);
+        THREAD_LOCK(data);
         data->ready = true;
+        READY_THREAD(data->ecs);
         pthread_cond_signal(&data->ecs->ready_cond);
+
         while (data->ready) pthread_cond_wait(&data->update_cond, &data->update_mutex);
 
-        // While data->ready == false, the ECS will not write to data.
-        pthread_mutex_unlock(&data->update_mutex);
+        System *system = data->system;
+        hasharray_t *ha = system->ent_queue;
+        size_t start = data->range.start;
+        size_t end = data->range.end;
+        THREAD_UNLOCK(data);
 
-        if (data->system->collection.size == 0) {
-            UpdateThread_update(data, data->system, NULL);
+        if (system->collection.size == 0) {
+            UpdateThread_update(data, system, NULL);
             continue;
         }
 
+        hash_t *hash;
         // Update the assigned chunk of the system.
-        hashtable_t *ht = data->system->ent_queue;
-        HT_RANGE_FOR(ht, data->range.start, data->range.end) {
-            UpdateThread_update(data, data->system, ha_get(data->ecs->entities, idx));
+        if (end == 0) HA_FOR(ha, hash, start) {
+            UpdateThread_update(data, system, ha_get(entities, *hash));
         }
+        else HA_RANGE_FOR(ha, hash, start, end) {
+            UpdateThread_update(data, system, ha_get(entities, *hash));
+        }
+
     }
 
     UpdateThread_end(data);
