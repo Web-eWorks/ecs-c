@@ -30,11 +30,11 @@ ECS* ECS_CustomNew(const ECS_AllocInfo *alloc)
 	// Properly free all memory if we can't create the ECS.
 	bool ok = true;
 
-	ecs->components = ht_alloc(alloc->components, sizeof(ComponentInfo));
+	ecs->components = ha_alloc(alloc->components, sizeof(ComponentInfo));
 	ecs->_last_component = 1;
 	ok = ok && ecs->components;
 
-	ecs->entities = ht_alloc(alloc->entities, sizeof(Entity));
+	ecs->entities = ha_alloc(alloc->entities, sizeof(Entity));
 	ecs->_last_entity = 1;
 	ok = ok && ecs->entities;
 
@@ -114,20 +114,16 @@ void ECS_Delete(ECS *ecs)
 	// Deleting entities will delete all attached components, which make up
 	// the extreme majority of all components.
 	if (ecs->entities) {
-		HT_FOR(ecs->entities, 0) {
-			Entity *entity = ht_get(ecs->entities, idx);
-			if (entity) ECS_EntityDelete(entity);
-		}
-		ht_free(ecs->entities);
+		Entity *entity;
+		HA_FOR(ecs->entities, entity, 0) ECS_EntityDelete(entity);
+		ha_free(ecs->entities);
 	}
 
 	// There are only a handful of component deletions to perform at this point.
 	if (ecs->components) {
-		HT_FOR(ecs->components, 0) {
-			ComponentInfo *comp = ht_get(ecs->components, idx);
-			if (comp) ECS_ComponentDelete(ecs, comp);
-		}
-		ht_free(ecs->components);
+		ComponentInfo *comp;
+		HA_FOR(ecs->components, comp, 0) ECS_ComponentDelete(ecs, comp);
+		ha_free(ecs->components);
 	}
 
 	if (ecs->systems) {
@@ -269,7 +265,7 @@ static void ECS_UpdateSystem(ECS *ecs, System *system)
 	// Update the system with all entities that have the correct components.
 	else if (system->collection.size > 0) {
 		HT_FOR(system->ent_queue, 0) {
-			Entity *entity = ht_get(ecs->entities, idx);
+			Entity *entity = ha_get(ecs->entities, idx);
 			if (!entity) continue;
 
 			Manager_UpdateSystem(ecs, system, entity);

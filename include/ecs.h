@@ -55,6 +55,7 @@ typedef struct {
 */
 
 #include "hash.h"
+#include "hasharray.h"
 #include "dynarray.h"
 #include "event.h"
 

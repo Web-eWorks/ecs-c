@@ -53,7 +53,7 @@ bool ECS_EntityAddComponent(Entity *entity, ComponentInfo *comp)
 
 ComponentInfo* ECS_EntityGetComponent(Entity *entity, hash_t hash)
 {
-	assert(entity && entity->ecs && hash);
+	assert(entity && entity->ecs);
 
 	ComponentInfo *comp = Manager_GetComponent(entity->ecs, hash);
 	if (!comp || comp->owner != entity) return NULL;
@@ -63,7 +63,7 @@ ComponentInfo* ECS_EntityGetComponent(Entity *entity, hash_t hash)
 
 ComponentInfo* ECS_EntityGetComponentOfType(Entity *entity, hash_t type, size_t idx)
 {
-	assert(entity && entity->ecs && type);
+	assert(entity && entity->ecs);
 
 	size_t found_count = 0;
 	size_t components = entity->components.size;
@@ -80,7 +80,7 @@ ComponentInfo* ECS_EntityGetComponentOfType(Entity *entity, hash_t type, size_t 
 
 void ECS_EntityRemoveComponent(Entity *entity, hash_t hash)
 {
-	assert(entity && entity->ecs && hash);
+	assert(entity && entity->ecs);
 
 	ComponentInfo *comp = ECS_EntityGetComponent(entity, hash);
 	if (!comp) return;

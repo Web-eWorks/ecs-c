@@ -197,8 +197,6 @@ void* ht_insert(hashtable_t *ht, hash_t hash, void *data)
 
 void* ht_get(hashtable_t *ht, hash_t hash)
 {
-	//assert(ht && ht->buckets && ht->storage);
-
 	bucket_t *ht_ent = get_entry(ht, hash);
 	return ht_ent ? ht_ent->data : NULL;
 }

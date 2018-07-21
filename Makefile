@@ -10,7 +10,7 @@ GR = $(shell tput setaf 2)
 BD = $(shell tput bold)
 RS = $(shell tput sgr0)
 
-debug: export CFLAGS += -g -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable
+debug: export CFLAGS += -g -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable -Werror=incompatible-pointer-types
 release: export CFLAGS += -O3
 
 .PHONY: debug release test test-callgrind test-cachegrind test-memcheck test-massif clean

@@ -5,7 +5,7 @@
 
 ComponentInfo* ECS_ComponentNew(ECS *ecs, hash_t type)
 {
-	assert(ecs && type);
+	assert(ecs);
 
 	ComponentType* comp_type = Manager_GetComponentType(ecs, type);
 	if (comp_type == NULL) return NULL;
@@ -21,7 +21,7 @@ ComponentInfo* ECS_ComponentNew(ECS *ecs, hash_t type)
 
 ComponentInfo* ECS_ComponentGet(ECS *ecs, hash_t id)
 {
-	assert(ecs && id);
+	assert(ecs);
 
 	return Manager_GetComponent(ecs, id);
 }

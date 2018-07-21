@@ -3,7 +3,7 @@
 // Get a component type's info.
 ComponentType* Manager_GetComponentType(ECS *ecs, hash_t type)
 {
-	assert(ecs && type);
+	assert(ecs);
 
 	return ht_get(ecs->cm_types, type);
 }
@@ -29,7 +29,7 @@ bool Manager_RegisterComponentType(ECS *ecs, ComponentType *type)
 // Return whether a component type has been registered.
 bool Manager_HasComponentType(ECS *ecs, hash_t type)
 {
-	assert(ecs && ecs->cm_types && type);
+	assert(ecs && ecs->cm_types);
 
 	return ht_get(ecs->cm_types, type) ? true : false;
 }
@@ -39,21 +39,18 @@ ComponentInfo* Manager_CreateComponent(ECS *ecs, ComponentType *type)
 	assert(ecs && type);
 
 	// Create the ComponentInfo
-	hash_t c_id = ht_get_free(ecs->components);
-	ComponentInfo *info = ht_insert(ecs->components, c_id, NULL);
+	hash_t c_id;
+	ComponentInfo *info = ha_insert_free(ecs->components, &c_id, NULL);
 	if (!info) return NULL;
 
 	// Setup the members
 	info->id = c_id;
 	info->type = type->type_hash;
 
-	if (!type->components){
-		assert(type->components);
-	}
 	// Allocate the component data
 	info->component = mp_alloc(type->components);
 	if (!info->component) {
-		ht_delete(ecs->components, info->id);
+		ha_delete(ecs->components, info->id);
 		return NULL;
 	}
 
@@ -67,9 +64,9 @@ ComponentInfo* Manager_CreateComponent(ECS *ecs, ComponentType *type)
 
 ComponentInfo* Manager_GetComponent(ECS *ecs, hash_t id)
 {
-	assert(ecs && id);
+	assert(ecs);
 
-	return ht_get(ecs->components, id);
+	return ha_get(ecs->components, id);
 }
 
 void Manager_DeleteComponent(ECS *ecs, ComponentInfo *comp)
@@ -85,7 +82,7 @@ void Manager_DeleteComponent(ECS *ecs, ComponentInfo *comp)
 
 	// Delete the component and it's data.
 	mp_free(type->components, comp->component);
-	ht_delete(ecs->components, comp->id);
+	ha_delete(ecs->components, comp->id);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -93,9 +90,9 @@ void Manager_DeleteComponent(ECS *ecs, ComponentInfo *comp)
 Entity* Manager_CreateEntity(ECS *ecs)
 {
 	assert(ecs);
-	const hash_t ent_id = ht_get_free(ecs->entities);
 
-	Entity *entity = ht_insert(ecs->entities, ent_id, NULL);
+	hash_t ent_id;
+	Entity *entity = ha_insert_free(ecs->entities, &ent_id, NULL);
 	if (entity == NULL) return NULL;
 
 	entity->id = ent_id;
@@ -107,9 +104,9 @@ Entity* Manager_CreateEntity(ECS *ecs)
 
 Entity* Manager_GetEntity(ECS *ecs, hash_t id)
 {
-	assert(ecs && id);
+	assert(ecs);
 
-	return ht_get(ecs->entities, id);
+	return ha_get(ecs->entities, id);
 }
 
 void Manager_DeleteEntity(ECS *ecs, Entity *entity)
@@ -137,7 +134,7 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity)
 	}
 
 	dyn_free(&entity->components);
-	ht_delete(ecs->entities, entity->id);
+	ha_delete(ecs->entities, entity->id);
 }
 
 /* -------------------------------------------------------------------------- */

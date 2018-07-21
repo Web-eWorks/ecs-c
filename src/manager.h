@@ -20,8 +20,8 @@ typedef struct ComponentType ComponentType;
 typedef struct ThreadData ThreadData;
 
 struct ECS {
-	hashtable_t *components;
-	hashtable_t *entities;
+	hasharray_t *components;
+	hasharray_t *entities;
 	hashtable_t *systems;
 
 	// incremental counters for generating ids

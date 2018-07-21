@@ -15,10 +15,13 @@ debug: $(OUT)
 
 # Generate object files from each source file
 obj/%.o: src/%.c include/%.h src/%.h $(HEADER)
-	$(CC) -c -o $@ $< $(CFLAGS)
+	@ echo "CC $< > $@"
+	@ $(CC) -c -o $@ $< $(CFLAGS)
 
 $(OUT): $(OBJS)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	@ echo "LD [$^] > $@"
+	@ $(CC) -o $@ $^ $(LDFLAGS)
+	@ echo "> Done."
 
 release: $(OUT)
 

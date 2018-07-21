@@ -71,7 +71,7 @@ int main (int argc, const char **argv)
 	res = REGISTER_SYSTEM(ecs, TestSystem, test_sys);
 	assert(res);
 
-	res = ECS_SetThreads(ecs, 4);
+	res = ECS_SetThreads(ecs, 1);
 	assert(res);
 
 	PERF_PRINT_US("Initialization");

@@ -78,7 +78,7 @@ void* UpdateThread_main(void *arg)
         // Update the assigned chunk of the system.
         hashtable_t *ht = data->system->ent_queue;
         HT_RANGE_FOR(ht, data->range.start, data->range.end) {
-            UpdateThread_update(data, data->system, ht_get(data->ecs->entities, idx));
+            UpdateThread_update(data, data->system, ha_get(data->ecs->entities, idx));
         }
     }
 
