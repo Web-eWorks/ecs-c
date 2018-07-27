@@ -3,8 +3,7 @@
 #include "manager.h"
 #include "profile.h"
 
-#define THREAD_LOCK(data) pthread_mutex_lock(&data->update_mutex)
-#define THREAD_UNLOCK(data) pthread_mutex_unlock(&data->update_mutex)
+#define THREAD_WAIT(data) pthread_cond_wait(&data->update_cond, &data->update_mutex)
 
 bool UpdateThread_start(ThreadData *data)
 {
@@ -66,8 +65,7 @@ void* UpdateThread_main(void *arg)
         data->ready = true;
         READY_THREAD(data->ecs);
         pthread_cond_signal(&data->ecs->ready_cond);
-
-        while (data->ready) pthread_cond_wait(&data->update_cond, &data->update_mutex);
+        while (data->ready) THREAD_WAIT(data);
 
         System *system = data->system;
         hasharray_t *ha = system->ent_queue;
@@ -88,7 +86,6 @@ void* UpdateThread_main(void *arg)
         else HA_RANGE_FOR(ha, hash, start, end) {
             UpdateThread_update(data, system, ha_get(entities, *hash));
         }
-
     }
 
     UpdateThread_end(data);

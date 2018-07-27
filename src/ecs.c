@@ -50,6 +50,8 @@ ECS* ECS_CustomNew(const ECS_AllocInfo *alloc)
 	ecs->num_threads = 0;
 	ecs->ready_threads = 0;
 	ecs->threads = NULL;
+	ecs->buffers = ha_alloc(4, sizeof(CommandBuffer));
+	ok = ok && ecs->buffers;
 
 	ok = ok && pthread_mutex_init(&ecs->global_lock, NULL) == 0;
 	ok = ok && pthread_cond_init(&ecs->ready_cond, NULL) == 0;
@@ -207,6 +209,45 @@ static void distribute_to_thread(ECS *ecs, ThreadData *thread, System *system, h
 	pthread_mutex_unlock(&thread->update_mutex);
 }
 
+// Get the number of ready threads.
+static size_t ready_threads(ECS *ecs)
+{
+	ECS_LOCK(ecs);
+	size_t ret = ecs->ready_threads;
+	ECS_UNLOCK(ecs);
+	return ret;
+}
+
+static void wait_until_ready(ECS *ecs, size_t num_threads)
+{
+	if (ecs->num_threads < num_threads) return;
+
+	ECS_LOCK(ecs);
+	while(ecs->ready_threads < num_threads) {
+		pthread_cond_wait(&ecs->ready_cond, &ecs->global_lock);
+	}
+	ECS_UNLOCK(ecs);
+}
+
+// Get the first ready thread index.
+static bool ready_thread(ECS *ecs, size_t *thread_idx)
+{
+	if (!thread_idx) return false;
+
+	for (size_t idx = *thread_idx; idx < ecs->num_threads; idx++) {
+		ThreadData *data = ecs->threads[idx];
+		THREAD_LOCK(data);
+		bool ready = data->ready;
+		THREAD_UNLOCK(data);
+		if (ready) {
+			*thread_idx = idx;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 // TODO: we assume all threads are ready here - rewrite this to support unready
 // threads from multiple-system queueing.
 void ECS_DistributeSystemUpdate(ECS *ecs, System *system)
@@ -221,6 +262,8 @@ void ECS_DistributeSystemUpdate(ECS *ecs, System *system)
 	}
 
 	hash_t last = 0;
+	// TODO: verify that all entities in the queue are actually getting updated,
+	// and that we're not losing one at the beginning or end.
 	for (size_t idx = 0; idx < ecs->num_threads; idx++) {
 		hash_t curr = last + ents;
 		distribute_to_thread(ecs, ecs->threads[idx], system, last, curr);

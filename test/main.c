@@ -52,11 +52,11 @@ const SystemUpdateInfo TestSystem_update_info = {
 };
 
 #ifndef TEST_ENTITIES
-#define TEST_ENTITIES 100000
+#define TEST_ENTITIES 1000000
 #endif
 
 #ifndef TEST_REPS
-#define TEST_REPS 1
+#define TEST_REPS 60
 #endif
 
 int main (int argc, const char **argv)
@@ -71,7 +71,7 @@ int main (int argc, const char **argv)
 	res = REGISTER_SYSTEM(ecs, TestSystem, test_sys);
 	assert(res);
 
-	res = ECS_SetThreads(ecs, 0);
+	res = ECS_SetThreads(ecs, 3);
 	assert(res);
 
 	PERF_PRINT_US("Initialization");

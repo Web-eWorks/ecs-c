@@ -14,6 +14,7 @@
 #include <pthread.h>
 
 #include "ecs.h"
+#include "command_buffer.h"
 
 typedef struct SystemCollection SystemCollection;
 typedef struct ComponentType ComponentType;
@@ -35,6 +36,7 @@ struct ECS {
 	ECS_AllocInfo alloc_info;
 
 	bool is_updating;
+	hasharray_t *buffers;
 
 	size_t num_threads;
 	size_t ready_threads;
@@ -137,7 +139,12 @@ void Manager_SystemEvent(ECS *ecs, System *info, Event *event);
 
 #define ECS_LOCK(ecs) pthread_mutex_lock(&ecs->global_lock);
 #define ECS_UNLOCK(ecs) pthread_mutex_unlock(&ecs->global_lock);
-#define READY_THREAD(ecs) { ECS_LOCK(ecs); (ecs)->ready_threads++; ECS_UNLOCK(ecs); }
-#define UNREADY_THREAD(ecs) { ECS_LOCK(ecs); (ecs)->ready_threads--; ECS_UNLOCK(ecs); }
+#define ECS_ATOMIC(ecs, op) ECS_LOCK(ecs) op; ECS_UNLOCK(ecs)
+
+#define THREAD_LOCK(data) pthread_mutex_lock(&data->update_mutex)
+#define THREAD_UNLOCK(data) pthread_mutex_unlock(&data->update_mutex)
+
+#define READY_THREAD(ecs) ECS_ATOMIC(ecs, (ecs)->ready_threads++)
+#define UNREADY_THREAD(ecs) ECS_ATOMIC(ecs, (ecs)->ready_threads--)
 
 #endif // ECS_MANAGER_H

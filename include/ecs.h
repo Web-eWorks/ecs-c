@@ -8,57 +8,9 @@
 #ifndef ECS_MAIN_H
 #define ECS_MAIN_H
 
-#include <stdbool.h>
-#include <stddef.h>
+#include "core.h"
 
-/*
-	Forward declarations.
-*/
-
-typedef struct Event Event;
-
-typedef void Component;
-typedef struct ComponentInfo ComponentInfo;
-
-typedef struct Entity Entity;
-
-/*
-    An encapsulation of update code.
-*/
-typedef struct System System;
-
-/*
-    The core datastructure of the ECS.
-*/
-typedef struct ECS ECS;
-
-/*
-    The performance of the ECS is affected by the contiguous nature of it's
-    data storage.
-
-    The default values provide a fairly good tradeoff between memory
-    fragmentation and consumption, but an application may pass its own values
-    for these allocations.
-*/
-typedef struct {
-    size_t components;
-    size_t entities;
-    size_t systems;
-    size_t cm_types;
-
-    size_t entity_components;
-    size_t system_entities;
-} ECS_AllocInfo;
-
-/*
-    Includes.
-*/
-
-#include "hash.h"
-#include "hasharray.h"
-#include "dynarray.h"
 #include "event.h"
-
 #include "component.h"
 #include "entity.h"
 #include "system.h"
@@ -92,5 +44,14 @@ bool ECS_UpdateSystems(ECS *ecs);
     End an ECS update.
 */
 void ECS_UpdateEnd(ECS *ecs);
+
+CommandBuffer* CommandBuffer_New(ECS *ecs);
+void CommandBuffer_Delete(CommandBuffer *buff);
+
+hash_t CommandBuffer_CreateEntity(CommandBuffer *buff);
+void CommandBuffer_DeleteEntity(CommandBuffer *buff, hash_t entity);
+
+void CommandBuffer_AddComponent(CommandBuffer *buff, hash_t entity, hash_t component);
+void CommandBuffer_RemoveComponent(CommandBuffer *buff, hash_t entity, hash_t component);
 
 #endif

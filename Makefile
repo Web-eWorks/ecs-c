@@ -1,4 +1,4 @@
-export CFLAGS += -std=c99
+export CFLAGS += -std=gnu99
 MAKE += --no-print-directory
 
 MEMCHECK = valgrind --tool=memcheck --leak-check=full --track-origins=yes
