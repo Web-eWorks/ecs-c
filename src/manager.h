@@ -21,17 +21,11 @@ typedef struct ComponentType ComponentType;
 typedef struct ThreadData ThreadData;
 
 struct ECS {
-	hasharray_t *components;
 	hasharray_t *entities;
 	hashtable_t *systems;
-
-	// incremental counters for generating ids
-	hash_t _last_component;
-	hash_t _last_entity;
-	hash_t _last_system;
-
 	// component type registry
 	hashtable_t *cm_types;
+
 	dynarray_t update_systems;
 	ECS_AllocInfo alloc_info;
 
@@ -56,7 +50,7 @@ struct ThreadData {
 	pthread_cond_t update_cond;
 
 	size_t collection_size;
-    ComponentInfo **collection;
+    Component **collection;
 
 	System *system;
 	// The range of entities to update.
@@ -69,9 +63,9 @@ struct ThreadData {
 void ThreadData_delete(ThreadData *data);
 
 struct SystemCollection {
-	int size;
+	size_t size;
 	hash_t *types;
-	ComponentInfo **comps;
+	Component **comps;
 };
 
 struct System {
@@ -83,11 +77,10 @@ struct System {
     system_event_func ev_func;
 
 	bool is_thread_safe;
-	bool updates_other_entities;
 
 	SystemCollection collection;
-	hash_t *before_systems;
-	hash_t *after_systems;
+	hash_t *dependencies;
+	size_t deps_size;
 
 	EventQueue *ev_queue;
 	hasharray_t *ent_queue;
@@ -99,7 +92,7 @@ struct ComponentType {
 	component_delete_func dl_func;
 	size_t type_size;
 	hash_t type_hash;
-	mempool_t *components;
+	hashtable_t *components;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -118,9 +111,12 @@ bool Manager_HasComponentType(ECS *ecs, hash_t type);
 ComponentType* Manager_GetComponentType(ECS *ecs, hash_t type);
 bool Manager_RegisterComponentType(ECS *ecs, ComponentType *type);
 
-ComponentInfo* Manager_CreateComponent(ECS *ecs, ComponentType *type);
-ComponentInfo* Manager_GetComponent(ECS *ecs, hash_t id);
-void Manager_DeleteComponent(ECS *ecs, ComponentInfo *comp);
+Component* Manager_CreateComponent(ECS *ecs, ComponentType *type, hash_t id);
+Component* Manager_GetComponent(ECS *ecs, ComponentType *type, hash_t id);
+// If a component exists under an entity's ID, it is automatically associated
+// with that entity. No backsies.
+Component* Manager_GetComponentByID(ECS *ecs, ComponentID id);
+void Manager_DeleteComponent(ECS *ecs, ComponentType *type, hash_t id);
 
 Entity* Manager_CreateEntity(ECS *ecs);
 Entity* Manager_GetEntity(ECS *ecs, hash_t id);
@@ -137,9 +133,15 @@ void Manager_SystemEvent(ECS *ecs, System *info, Event *event);
 
 /* -------------------------------------------------------------------------- */
 
-#define ECS_LOCK(ecs) pthread_mutex_lock(&ecs->global_lock);
-#define ECS_UNLOCK(ecs) pthread_mutex_unlock(&ecs->global_lock);
-#define ECS_ATOMIC(ecs, op) ECS_LOCK(ecs) op; ECS_UNLOCK(ecs)
+#define ECS_ERROR(ecs, str, ...) { \
+	char _error_msg[128]; \
+	snprintf(_error_msg, 128, str, __VA_ARGS__); \
+	ECS_Error(ecs, _error_msg); \
+}
+
+#define ECS_LOCK(ecs) pthread_mutex_lock(&ecs->global_lock)
+#define ECS_UNLOCK(ecs) pthread_mutex_unlock(&ecs->global_lock)
+#define ECS_ATOMIC(ecs, op) ECS_LOCK(ecs); op; ECS_UNLOCK(ecs)
 
 #define THREAD_LOCK(data) pthread_mutex_lock(&data->update_mutex)
 #define THREAD_UNLOCK(data) pthread_mutex_unlock(&data->update_mutex)

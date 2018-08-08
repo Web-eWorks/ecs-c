@@ -19,15 +19,17 @@ typedef struct Event Event;
 
 /*
     A component is an encapsulation of a single set of data, usually related to
-    a single purpose.
+    a single purpose. Components are implemented as black-box data initialized
+    and managed by external code, but allocated and stored by the ECS.
+
+    Components are stored in arrays of type, indexed by their owning entity's ID.
 */
 typedef void Component;
 
 /*
-    Components are handled by client code; the ECS works with ComponentInfo
-    structures as abstractions over the black-box nature of Components.
+    A simple way to refer to components.
 */
-typedef struct ComponentInfo ComponentInfo;
+typedef struct ComponentID ComponentID;
 
 /*
     The basic unit of objects. Each entity may contain one or more components.

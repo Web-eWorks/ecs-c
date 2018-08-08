@@ -10,6 +10,7 @@ CommandBuffer* CommandBuffer_New(ECS *ecs)
 
     buff->ecs = ecs;
     buff->id = id;
+    buff->last_entity = 0;
     dyn_alloc(&buff->commands, 16, sizeof(Command));
     pthread_mutex_init(&buff->mutex, NULL);
 
@@ -37,8 +38,7 @@ hash_t CommandBuffer_CreateEntity(CommandBuffer *buff)
 {
     assert(buff);
 
-    ECS_ATOMIC(buff->ecs, hash_t entity = ha_first_free(buff->ecs->entities));
-    Command cm = { CMD_EntityCreate, {entity, 0} };
+    Command cm = { CMD_EntityCreate, {buff->last_entity++, 0} };
 
     insert(buff, &cm);
     return cm.data[0];

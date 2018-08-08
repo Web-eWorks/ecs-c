@@ -88,6 +88,23 @@ void dyn_delete(dynarray_t *arr, int idx)
 	if (r_idx == arr->size - 1) --arr->size;
 }
 
+void dyn_remove(dynarray_t *arr, int idx, bool just_swap)
+{
+	assert(arr && arr->ptr);
+
+	const size_t r_idx = GET_RIDX(arr->size, idx);
+	if (just_swap) {
+		dyn_swap(arr, r_idx, -1);
+	}
+	else {
+		for (size_t idx = r_idx+1; idx < arr->size; idx++) {
+			dyn_swap(arr, r_idx-1, idx);
+		}
+	}
+	
+	dyn_delete(arr, -1);
+}
+
 bool dyn_swap(dynarray_t *arr, int idx_a, int idx_b)
 {
 	assert(arr && arr->ptr);

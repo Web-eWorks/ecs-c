@@ -5,35 +5,10 @@
 
 #include "ecs.h"
 
-/*
-	A component is an arbitrary structure of a certain type. The type of a
-	structure is stored as a hash id, referencing a ComponentType entry.
-
-	Two components must not share the same ID.
-*/
-struct ComponentInfo {
+struct ComponentID {
 	hash_t id;
 	hash_t type;
-	Component *component;
-	Entity *owner;
 };
-
-/*
-	Initializes a new component, sets up the ComponentInfo, and returns a
-	pointer to the new component.
-*/
-ComponentInfo* ECS_ComponentNew(ECS *ecs, hash_t type);
-
-/*
-	Get a component by it's id.
-*/
-ComponentInfo* ECS_ComponentGet(ECS *ecs, hash_t id);
-
-/*
-	Destroys a component, removing it from the owning Entity if present, and
-	freeing the ComponentInfo.
-*/
-void ECS_ComponentDelete(ECS *ecs, ComponentInfo *info);
 
 /*
 	Returns a string representation of a component, suitable for printing to the
@@ -41,7 +16,7 @@ void ECS_ComponentDelete(ECS *ecs, ComponentInfo *info);
 
 	The returned string must be freed by the caller.
 */
-const char* ECS_ComponentToString(ECS *ecs, ComponentInfo *info);
+const char* ECS_ComponentToString(ECS *ecs, ComponentID id);
 
 /*
 	Custom component initialization function.
@@ -60,33 +35,57 @@ typedef void (*component_create_func)(Component*);
 typedef void (*component_delete_func)(Component*);
 
 /*
+	Defines how components are stored.
+
+	ComponentStorageNormal:
+		A 1:1 mapping between components and their data. Component data creation
+		and deletion is manually controlled by instantiation code.
+	ComponentStorageFlyweight:
+		Components follow the flyweight pattern. Multiple components reference the
+		same component data. Useful for read-only components.
+	ComponentStorageNone:
+		Used for empty components that are just used as a signalling mechanism.
+		Component creation and deletion functions will not be called.
+*/
+typedef enum {
+	ComponentStorageNormal,
+    ComponentStorageFlyweight,
+    ComponentStorageNone
+} ComponentStorage;
+
+/*
+	Information about a component type.
+
+	When using
+*/
+typedef struct {
+	const char *type;
+	size_t size;
+	ComponentStorage storage;
+
+	component_create_func cr_func;
+	component_delete_func dl_func;
+} ComponentRegistry;
+
+/*
 	Registers a new type of component.
 
 	@param type: the typename of the new type
-	@param cr_func: the component data's creation function
-	@param dl_func: the component data's deletion function
-	@param size: the size of the component's data.
+	@param reg: the component's registry info
 	@returns: true if successful, false otherwise
 
 	Example usage:
 
-		bool ok = ECS_ComponentRegisterType(
-			ecs,
+		ComponentRegistry reg = {
 			"MyComponent",
+			sizeof(MyComponent),
+			ComponentStorageNormal,
 			&MyComponent_New,
-			&MyComponent_Delete,
-			sizeof(struct MyComponent));
-
-		//alternatively:
-		bool ok = REGISTER_COMPONENT(ecs, MyComponent)
-
+			&MyComponent_Delete
+		};
+		bool ok = ECS_ComponentRegisterType(ecs, &reg);
 */
-bool ECS_ComponentRegisterType(
-	ECS *ecs,
-	const char *type,
-	component_create_func cr_func,
-	component_delete_func dl_func,
-	size_t size);
+bool ECS_ComponentRegisterType(ECS *ecs, const ComponentRegistry *registry);
 
 /*
 	Returns whether a component type has already been registered with that
@@ -106,11 +105,12 @@ bool ECS_HasComponentType(ECS *ecs, const char *type);
 	Then, you need to define the allocate and delete functions for the
 	component.
 
+		COMPONENT_IMPL(Name, StorageType)
 		void Name_new(Name *comp);
 		void Name_free(Name *comp);
 
-	These are declared as static inline void, but the definition only needs
-	void.
+	Components using the ComponentStorageNone type should call COMPONENT_IMPL_NONE
+	instead, as this doesn't define unused component handler functions.
 
 	Then, in your initialization, instead of ECS_ComponentRegisterType, call:
 
@@ -121,14 +121,24 @@ bool ECS_HasComponentType(ECS *ecs, const char *type);
 #define COMPONENT(T) \
 	typedef struct T T;
 
-#define COMPONENT_IMPL(T) \
+#define COMPONENT_IMPL(T, Storage) \
 	static inline void T##_new(T *comp); \
 	static void T##_cr(Component *p) { return T##_new((T *)p); } \
 	static inline void T##_free(T *comp); \
 	static void T##_dl(Component *p) { return T##_free((T *)p); } \
+	const ComponentRegistry T##_reg  = { \
+		#T, sizeof(T), Storage, \
+		T##_cr, T##_dl \
+	};
+
+#define COMPONENT_IMPL_NONE(T) \
+	const ComponentRegistry T##_reg { \
+		#T, sizeof(T), ComponentStorageNone, \
+		NULL, NULL \
+	};
 
 #define REGISTER_COMPONENT(ECS, T) \
-	(ECS_ComponentRegisterType(ECS, #T, T##_cr, T##_dl, sizeof(T)))
+	(ECS_ComponentRegisterType(ECS, &T##_reg))
 
 #define COMPONENT_ID(T) hash_string(#T)
 

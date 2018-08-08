@@ -35,15 +35,12 @@ void System_DeleteCollection(SystemCollection *coll)
     free(coll->comps);
 }
 
-bool ECS_SystemRegister(
-    ECS *ecs,
-    const char *name,
-    system_update_func update,
-    system_event_func event,
-    SystemUpdateInfo update_info,
-    void *data)
+bool ECS_SystemRegister(ECS *ecs, const SystemRegistryInfo *reg, void *data)
 {
-    assert(ecs && name && update);
+    assert(ecs && reg->name && reg->update);
+
+    const char *name = reg->name;
+    const SystemUpdateInfo *update_info = reg->update_info;
 
     System info;
     info.name = malloc(strlen(name) + 1);
@@ -55,26 +52,28 @@ bool ECS_SystemRegister(
 
     info.udata = data;
 
-    info.up_func = update;
-    info.ev_func = event;
+    info.up_func = reg->update;
+    info.ev_func = reg->event;
 
     SystemCollection coll = { 0 };
     info.collection = coll;
 
-    info.is_thread_safe = update_info.IsThreadSafe;
-    info.updates_other_entities = update_info.UpdatesOtherEntities;
-    if (info.updates_other_entities) info.is_thread_safe = false;
+    info.is_thread_safe = update_info->IsThreadSafe
+        && !update_info->UpdatesOtherEntities
+        && !update_info->CreatesOrDeletesEntities;
 
-    info.before_systems = info.after_systems = NULL;
-    if (update_info.BeforeSystems) string_arr_to_type(&info.before_systems, update_info.BeforeSystems);
-    if (update_info.AfterSystems) string_arr_to_type(&info.after_systems, update_info.AfterSystems);
+    info.dependencies = NULL;
+    info.deps_size = 0;
+    if (update_info->AfterSystems) {
+        info.deps_size = string_arr_to_type(&info.dependencies, update_info->AfterSystems);
+    }
 
     info.ev_queue = EventQueue_New();
     info.ent_queue = NULL;
 
     // Convert the collection to type ids for speed.
-    if (update_info.Collection) {
-        if (!System_CreateCollection(&info.collection, update_info.Collection)) {
+    if (reg->collection) {
+        if (!System_CreateCollection(&info.collection, reg->collection)) {
             free((char *)info.name);
             System_DeleteCollection(&info.collection);
             return false;

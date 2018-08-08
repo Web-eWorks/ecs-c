@@ -88,6 +88,16 @@ void dyn_delete(dynarray_t *arr, int idx);
 bool dyn_swap(dynarray_t *arr, int idx_a, int idx_b);
 
 /*
+	Removes an item in the array and closes gaps.
+
+	If just_swap is true, this function swaps the removed element and the last
+	element, saving time but destroying array order.
+	Otherwise, this function preserves the order of the array.
+
+*/
+void dyn_remove(dynarray_t *arr, int idx, bool just_swap);
+
+/*
 	Reserve space for at least `newcap` more slots in the array beyond the last
 	filled slot.
 

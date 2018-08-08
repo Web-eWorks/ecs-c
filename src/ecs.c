@@ -30,17 +30,11 @@ ECS* ECS_CustomNew(const ECS_AllocInfo *alloc)
 	// Properly free all memory if we can't create the ECS.
 	bool ok = true;
 
-	ecs->components = ha_alloc(alloc->components, sizeof(ComponentInfo));
-	ecs->_last_component = 1;
-	ok = ok && ecs->components;
-
 	ecs->entities = ha_alloc(alloc->entities, sizeof(Entity));
-	ecs->_last_entity = 1;
 	ok = ok && ecs->entities;
 
 	ecs->systems = ht_alloc(alloc->systems, sizeof(System));
 	ok = ok && ecs->systems;
-	ecs->_last_system = 1;
 	ok = ok && dyn_alloc(&ecs->update_systems, alloc->systems, sizeof(System *));
 
 	ecs->cm_types = ht_alloc(alloc->cm_types, sizeof(ComponentType));
@@ -122,13 +116,6 @@ void ECS_Delete(ECS *ecs)
 		ha_free(ecs->entities);
 	}
 
-	// There are only a handful of component deletions to perform at this point.
-	if (ecs->components) {
-		ComponentInfo *comp;
-		HA_FOR(ecs->components, comp, 0) ECS_ComponentDelete(ecs, comp);
-		ha_free(ecs->components);
-	}
-
 	if (ecs->systems) {
 		HT_FOR(ecs->systems, 0) {
 			System *system = ht_get(ecs->systems, idx);
@@ -138,11 +125,12 @@ void ECS_Delete(ECS *ecs)
 	}
 	dyn_free(&ecs->update_systems);
 
+	// There are only a handful of component deletions to perform at this point.
 	if (ecs->cm_types) {
 		HT_FOR(ecs->cm_types, 0) {
 			ComponentType *type = ht_get(ecs->cm_types, idx);
 			if (type) {
-				mp_destroy(type->components);
+				ht_free(type->components);
 				free((char *)type->type);
 				ht_delete(ecs->cm_types, idx);
 			}
@@ -160,6 +148,15 @@ void ECS_Error(ECS *ecs, const char *error)
 	ECS_UNLOCK(ecs);
 }
 
+/*
+	TODO: Allow systems to define their order of execution, and handle circular
+	referencing in the systems.
+*/
+void ECS_ArrangeSystems(ECS *ecs)
+{
+
+}
+
 // Create entity queues for each system, resolve the order of systems, etc.
 bool ECS_UpdateBegin(ECS *ecs)
 {
@@ -170,9 +167,7 @@ bool ECS_UpdateBegin(ECS *ecs)
 		dyn_insert(&ecs->update_systems, ecs->update_systems.size, &system);
 	}
 
-	// TODO: allow systems to define their order of execution.
-	// TODO: handle circular referencing in the systems.
-	// TODO: maybe make system ordering an issue of the caller?
+	ECS_ArrangeSystems(ecs);
 
 	return true;
 }
@@ -272,7 +267,7 @@ void ECS_DistributeSystemUpdate(ECS *ecs, System *system)
 }
 
 // Update a single system.
-static void ECS_UpdateSystem(ECS *ecs, System *system)
+void ECS_UpdateSystem(ECS *ecs, System *system)
 {
 	if (ecs->num_threads > 0 && system->is_thread_safe) {
 		ECS_DistributeSystemUpdate(ecs, system);
@@ -301,6 +296,41 @@ static void ECS_UpdateSystem(ECS *ecs, System *system)
 	}
 }
 
+void ECS_ResolveCommandBuffers(ECS *ecs)
+{
+	/* TODO: refactor these for the new APIs
+	CommandBuffer *buff;
+	HA_FOR(ecs->buffers, buff, 0) {
+		hashtable_t *ht = ht_alloc(32, sizeof(hash_t));
+		for (size_t idx = 0; idx < buff->commands.size; idx++) {
+			Command *cm = dyn_get(&buff->commands, idx);
+
+			hash_t id = cm->data[0];
+			if (ht_get(ht, id)) id = *(hash_t *)ht_get(ht, id);
+			Entity *e = ECS_EntityGet(ecs, id);
+
+			if (cm->type == CMD_EntityCreate) {
+				e = ECS_EntityNew(ecs);
+				ht_insert(ht, cm->data[0], &e->id);
+			}
+			else if (cm->type == CMD_EntityDelete) {
+				if (e) ECS_EntityDelete(e);
+			}
+			else if (cm->type == CMD_ComponentAttach) {
+				ComponentInfo *c = ECS_ComponentGet(ecs, cm->data[1]);
+				if (e && c) ECS_EntityAddComponent(e, c);
+			}
+			else if (cm->type == CMD_ComponentDetach) {
+				if (e) ECS_EntityRemoveComponent(e, cm->data[1]);
+			}
+		}
+
+		ht_free(ht);
+		CommandBuffer_Delete(buff);
+	}
+	*/
+}
+
 /*
 	Each system (nominally) updates on one entity at a time, and then only on
 	certain components on those entities.
@@ -327,8 +357,13 @@ bool ECS_UpdateSystems(ECS *ecs)
 	HT_FOR(ecs->systems, 0) {
 		System *system = ht_get(ecs->systems, idx);
 		ECS_UpdateSystem(ecs, system);
+
+		// TODO: allow queuing multiple systems when necessary.
 		if (ecs->num_threads > 0) {
 			synchronize_threads(ecs);
+		}
+		if (ha_len(ecs->buffers) > 0) {
+			ECS_ResolveCommandBuffers(ecs);
 		}
 	}
 

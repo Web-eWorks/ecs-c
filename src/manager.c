@@ -11,12 +11,12 @@ ComponentType* Manager_GetComponentType(ECS *ecs, hash_t type)
 // Registers a new component type.
 bool Manager_RegisterComponentType(ECS *ecs, ComponentType *type)
 {
-	assert(ecs && ecs->components && ecs->cm_types && type);
+	assert(ecs && ecs->cm_types && type);
 
 	type = ht_insert(ecs->cm_types, type->type_hash, type);
 	if (type == NULL) return false;
 
-	type->components = mp_init(128, type->type_size);
+	type->components = ht_alloc(ecs->alloc_info.components, type->type_size);
 	if (!type->components) {
 		free((char *)type->type);
 		ht_delete(ecs->cm_types, type->type_hash);
@@ -34,55 +34,49 @@ bool Manager_HasComponentType(ECS *ecs, hash_t type)
 	return ht_get(ecs->cm_types, type) ? true : false;
 }
 
-ComponentInfo* Manager_CreateComponent(ECS *ecs, ComponentType *type)
+Component* Manager_CreateComponent(ECS *ecs, ComponentType *type, hash_t id)
 {
 	assert(ecs && type);
 
-	// Create the ComponentInfo
-	hash_t c_id;
-	ComponentInfo *info = ha_insert_free(ecs->components, &c_id, NULL);
-	if (!info) return NULL;
+	// Create the component
+	Component *comp = ht_insert(type->components, id, NULL);
+	if (!comp) return NULL;
 
-	// Setup the members
-	info->id = c_id;
-	info->type = type->type_hash;
+	// And run the creation function.
+	if (type->cr_func) type->cr_func(comp);
 
-	// Allocate the component data
-	info->component = mp_alloc(type->components);
-	if (!info->component) {
-		ha_delete(ecs->components, info->id);
-		return NULL;
-	}
-
-	// Zero-initialize the component data,
-	memset(info->component, 0, type->type_size);
-	// and run the component creation function.
-	if (type->cr_func) type->cr_func(info->component);
-
-	return info;
+	return comp;
 }
 
-ComponentInfo* Manager_GetComponent(ECS *ecs, hash_t id)
+Component* Manager_GetComponent(ECS *ecs, ComponentType *type, hash_t id)
 {
 	assert(ecs);
 
-	return ha_get(ecs->components, id);
+	return ht_get(type->components, id);
 }
 
-void Manager_DeleteComponent(ECS *ecs, ComponentInfo *comp)
+Component* Manager_GetComponentByID(ECS *ecs, ComponentID id)
 {
-	assert(ecs && comp && !comp->owner);
+	assert(ecs);
 
-	// Components must have a valid type.
-	ComponentType *type = ht_get(ecs->cm_types, comp->type);
-	if (!type) return;
+	ComponentType *cm_type = ht_get(ecs->cm_types, id.type);
+	if (!cm_type) return NULL;
+
+	return ht_get(cm_type->components, id.id);
+}
+
+void Manager_DeleteComponent(ECS *ecs, ComponentType *type, hash_t id)
+{
+	assert(ecs && type && type->components);
+
+	Component *comp = ht_get(type->components, id);
+	if (!comp) return;
 
 	// Call the dtor.
-	if (type->dl_func) type->dl_func(comp->component);
+	if (type->dl_func) type->dl_func(comp);
 
 	// Delete the component and it's data.
-	mp_free(type->components, comp->component);
-	ha_delete(ecs->components, comp->id);
+	ht_delete(type->components, id);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -96,7 +90,7 @@ Entity* Manager_CreateEntity(ECS *ecs)
 	if (entity == NULL) return NULL;
 
 	entity->id = ent_id;
-	dyn_alloc(&entity->components, 8, sizeof(hash_t));
+	dyn_alloc(&entity->components, ecs->alloc_info.entity_components, sizeof(hash_t));
 	entity->ecs = ecs;
 
 	return entity;
@@ -114,17 +108,16 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity)
 	assert(ecs && entity);
 
 	while (entity->components.size > 0) {
-		hash_t hash = *(hash_t *)dyn_get(&entity->components, 0);
-		ComponentInfo *comp = ECS_EntityGetComponent(entity, hash);
-		if (!comp) continue;
+		hash_t type = *(hash_t *)dyn_get(&entity->components, 0);
 
-		// clear the component's owner
-		comp->owner = NULL;
 		// remove the component from the entity
 		dyn_swap(&entity->components, 0, -1);
 		dyn_delete(&entity->components, -1);
-		// delete the component.
-		Manager_DeleteComponent(ecs, comp);
+
+		ComponentType *cm_type = ht_get(ecs->cm_types, type);
+		if (!cm_type) continue;
+
+		Manager_DeleteComponent(ecs, cm_type, entity->id);
 	}
 
 	// Remove the entity from the system's queue.
@@ -199,7 +192,8 @@ bool Manager_ShouldSystemQueueEntity(ECS *ecs, System *system, Entity *entity)
 
 	bool should_queue = true;
 	for (size_t idx = 0; idx < system->collection.size; idx++) {
-		if (!ECS_EntityGetComponentOfType(entity, system->collection.types[idx], 0)) {
+		ComponentID id = {entity->id, system->collection.types[idx]};
+		if (!Manager_GetComponentByID(ecs, id)) {
 			should_queue = false;
 			break;
 		}
@@ -215,9 +209,8 @@ void Manager_UpdateSystem(ECS *ecs, System *system, Entity *entity)
 	// Systems must have an update function to be registered, and entities don't
 	// get in the queue without having all the required components.
 	for (size_t idx = 0; idx < system->collection.size; idx++) {
-		ComponentInfo *comp = ECS_EntityGetComponentOfType(
-			entity, system->collection.types[idx], 0);
-		system->collection.comps[idx] = comp;
+		ComponentID id = {entity->id, system->collection.types[idx]};
+		system->collection.comps[idx] = Manager_GetComponentByID(ecs, id);
 	}
 
 	system->up_func(entity, system->collection.comps, system->udata);

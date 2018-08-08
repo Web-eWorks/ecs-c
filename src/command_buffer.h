@@ -17,6 +17,7 @@ typedef struct {
 struct CommandBuffer {
 	ECS *ecs;
     hash_t id;
+    hash_t last_entity;
     pthread_mutex_t mutex;
     dynarray_t commands;
 };

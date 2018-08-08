@@ -21,79 +21,82 @@ void ECS_EntityDelete(Entity *entity)
 	Manager_DeleteEntity(entity->ecs, entity);
 }
 
+Entity* ECS_EntityGet(ECS *ecs, hash_t id)
+{
+	assert(ecs);
+
+	Entity *entity = ha_get(ecs->entities, id);
+	return entity;
+}
+
 const char* ECS_EntityToString(Entity *entity)
 {
 	assert(entity && entity->ecs);
 
-	char *str = malloc(18);
+	char *str = malloc(24);
 	sprintf(str, "Entity (%08x)", entity->id);
 
 	return str;
 }
 
-bool ECS_EntityAddComponent(Entity *entity, ComponentInfo *comp)
-{
-	assert(entity && entity->ecs && comp);
-
-	if (comp->owner != NULL) {
-		fprintf(stderr, "Error: component %x is already attached to entity %x.\n",
-			comp->id, comp->owner->id);
-		return false;
+#define GET_TYPE(ecs, type, ret) ComponentType *cm_type = ht_get(ecs->cm_types, type); \
+	if (!cm_type) { \
+		ECS_ERROR(ecs, "Unknown component type %x.", type); \
+		return ret; \
 	}
 
-	comp->owner = entity;
-	dyn_insert(&entity->components, entity->components.size, &comp->id);
-	// We do this at the AddComponent / RemoveComponent step to gain performance.
-	// Adding components to entities takes about 1.5x the time, but it gains an immense
-	// amount of performance on the update step.
-	Manager_UpdateCollections(entity->ecs, entity);
-
-	return true;
-}
-
-ComponentInfo* ECS_EntityGetComponent(Entity *entity, hash_t hash)
+Component* ECS_EntityAddComponent(Entity *entity, hash_t type)
 {
 	assert(entity && entity->ecs);
 
-	ComponentInfo *comp = Manager_GetComponent(entity->ecs, hash);
-	if (!comp || comp->owner != entity) return NULL;
+	ECS *ecs = entity->ecs;
+	GET_TYPE(ecs, type, NULL);
+
+	// If we already have a component on the entity, return it.
+	Component *comp = ht_get(cm_type->components, entity->id);
+	if (comp) return comp;
+
+	// Otherwise, create the new component.
+	comp = Manager_CreateComponent(ecs, cm_type, entity->id);
+	dyn_insert(&entity->components, entity->components.size, &type);
+
+	// Update systems' entity queues.
+	// We do this at the AddComponent / RemoveComponent step to gain performance.
+	// Adding components to entities takes about 0.5x more time, but it gains an
+	// immense amount of performance on the update step.
+	Manager_UpdateCollections(entity->ecs, entity);
 
 	return comp;
 }
 
-ComponentInfo* ECS_EntityGetComponentOfType(Entity *entity, hash_t type, size_t idx)
+Component* ECS_EntityGetComponent(Entity *entity, hash_t type)
 {
 	assert(entity && entity->ecs);
 
-	size_t found_count = 0;
-	size_t components = entity->components.size;
-	for (size_t idx = 0; idx < components; idx++) {
-		hash_t *hash = dyn_get(&entity->components, idx);
-		ComponentInfo *comp = Manager_GetComponent(entity->ecs, *hash);
-		if (!comp || comp->type != type) continue;
-		if (found_count == idx) return comp;
-		else found_count++;
-	}
+	GET_TYPE(entity->ecs, type, NULL);
+	Component *comp = ht_get(cm_type->components, entity->id);
 
-	return NULL;
+	return comp;
 }
 
-void ECS_EntityRemoveComponent(Entity *entity, hash_t hash)
+ComponentID ECS_EntityGetComponentID(Entity *entity, hash_t type)
+{
+	assert(entity);
+
+	ComponentID id = {entity->id, type};
+	return id;
+}
+
+void ECS_EntityRemoveComponent(Entity *entity, hash_t type)
 {
 	assert(entity && entity->ecs);
 
-	ComponentInfo *comp = ECS_EntityGetComponent(entity, hash);
-	if (!comp) return;
+	GET_TYPE(entity->ecs, type,);
 
-	comp->owner = NULL;
+	int idx = dyn_find(&entity->components, &type);
+	if (idx < 0) return;
 
-	int idx = dyn_find(&entity->components, &hash);
-	// should never happen.
-	if (idx == -1) {
-		fprintf(stderr, "Error: entity %x does not have component %x, even though it should!\n",
-			entity->id, comp->id);
-		return;
-	}
+	Manager_DeleteComponent(entity->ecs, cm_type, entity->id);
 
 	dyn_swap(&entity->components, idx, -1);
 	dyn_delete(&entity->components, -1);

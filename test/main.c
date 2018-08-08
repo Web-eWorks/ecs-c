@@ -6,7 +6,7 @@
 #include "testcomponent.h"
 #include "testsystem.h"
 
-COMPONENT_IMPL(TestComponent)
+COMPONENT_IMPL(TestComponent, ComponentStorageNormal)
 void TestComponent_new(TestComponent *comp)
 {
 	comp->string = malloc(16);
@@ -24,15 +24,15 @@ const char* TestComponent_GetString(TestComponent *comp)
 }
 
 SYSTEM_IMPL(TestSystem)
-void TestSystem_update(Entity *e, ComponentInfo **c, TestSystem *system)
+void TestSystem_update(Entity *e, Component **c, TestSystem *system)
 {
 	// This will always assert true, but we check it here anyways.
-	assert(c[0] && c[0]->owner == e && c[0]->component);
+	assert(c[0]);
 
 	// Since we returned "TestComponent" as element 0 in TestSystem_collection,
-	// c[0]->component will always be a TestComponent pointer, and thus it is
+	// c[0] will always be a TestComponent pointer, and thus it is
 	// safe to cast like this.
-	TestComponent *comp = c[0]->component;
+	TestComponent *comp = c[0];
 	assert(comp->string);
 }
 bool TestSystem_event(Event *event, TestSystem *system)
@@ -40,15 +40,13 @@ bool TestSystem_event(Event *event, TestSystem *system)
 	return false;
 }
 
-const char *TestSystem_collection[2] = {
-	"TestComponent",
+const char *TestSystem_collection[] = {
+	ComponentRead(TestComponent),
 	NULL
 };
 
 const SystemUpdateInfo TestSystem_update_info = {
-	true, false,
-	NULL, NULL,
-	TestSystem_collection
+	true, false, false, NULL
 };
 
 #ifndef TEST_ENTITIES
@@ -78,17 +76,14 @@ int main (int argc, const char **argv)
 	printf("> Initialization done (1/4).\n");
 
 	PERF_UPDATE();
-	ComponentInfo *comp;
 	Entity *entity;
+	TestComponent *comp;
 	hash_t comp_type = COMPONENT_ID(TestComponent);
 	for (int i = 0; i < TEST_ENTITIES; i++) {
-		comp = ECS_ComponentNew(ecs, comp_type);
-		assert(comp);
 		entity = ECS_EntityNew(ecs);
+		comp = ECS_EntityAddComponent(entity, comp_type);
 		assert(entity);
-
-		res = ECS_EntityAddComponent(entity, comp);
-		assert(res);
+		assert(comp);
 	}
 
 	PERF_PRINT_MS("Entity Creation");

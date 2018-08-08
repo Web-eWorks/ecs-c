@@ -10,7 +10,7 @@ bool UpdateThread_start(ThreadData *data)
     assert(data && data->ecs);
 
     data->collection_size = 32;
-    data->collection = calloc(data->collection_size, sizeof(ComponentInfo *));
+    data->collection = calloc(data->collection_size, sizeof(Component *));
 
     if (!data->collection) {
         return false;
@@ -24,7 +24,7 @@ void UpdateThread_update(ThreadData *data, System *system, Entity *entity)
     size_t collection_size = system->collection.size;
     // Resize the buffer if it needs it.
     if (data->collection_size < collection_size) {
-        ComponentInfo **ptr = calloc(collection_size, sizeof(ComponentInfo *));
+        Component **ptr = calloc(collection_size, sizeof(Component *));
         if (!ptr) {
             ECS_Error(data->ecs, "Failed to resize thread component buffer!");
             data->running = false;
@@ -38,9 +38,8 @@ void UpdateThread_update(ThreadData *data, System *system, Entity *entity)
     // Because we're not inserting or deleting components from the ECS or entity
     // during threaded update steps, getting components is thread safe.
 	for (size_t idx = 0; idx < collection_size; idx++) {
-		ComponentInfo *comp = ECS_EntityGetComponentOfType(
-			entity, system->collection.types[idx], 0);
-		data->collection[idx] = comp;
+        ComponentID id = {entity->id, system->collection.types[idx]};
+        data->collection[idx] = Manager_GetComponentByID(data->ecs, id);
 	}
 
 	system->up_func(entity, data->collection, system->udata);

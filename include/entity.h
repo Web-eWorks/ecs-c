@@ -22,6 +22,11 @@ Entity* ECS_EntityNew(ECS *ecs);
 void ECS_EntityDelete(Entity* entity);
 
 /*
+	Gets an entity by ID. Returns NULL if no entity was found.
+*/
+Entity* ECS_EntityGet(ECS *ecs, hash_t id);
+
+/*
 	Generate a string representation of an entity, suitable for display to the
 	user.
 
@@ -32,25 +37,24 @@ const char* ECS_EntityToString(Entity *entity);
 /* -------------------------------------------------------------------------- */
 
 /*
-	Adds a component to the entity. If the component is already attached to
-	another entity, the function fails.
+	Creates a new component and adds it to the entity.
 */
-bool ECS_EntityAddComponent(Entity *entity, ComponentInfo *comp);
+Component* ECS_EntityAddComponent(Entity *entity, hash_t type);
 
 /*
 	Return a component's data if it is attached to this entity.
 */
-ComponentInfo* ECS_EntityGetComponent(Entity *entity, hash_t comp);
+Component* ECS_EntityGetComponent(Entity *entity, hash_t type);
 
 /*
-	Returns the `idx` component of `type` attached to this entity. If there are
-	no components of that type, or there are `idx` or less, returns NULL.
+	Returns the ComponentID of the specified component attached to this entity.
+	Does not check if there is a component of that type, simply returns an ID.
 */
-ComponentInfo* ECS_EntityGetComponentOfType(Entity *entity, hash_t type, size_t idx);
+ComponentID ECS_EntityGetComponentID(Entity *entity, hash_t type);
 
 /*
-	Remove a component from the entity. Does not free the component.
+	Remove a component from the entity and free the component's data.
 */
-void ECS_EntityRemoveComponent(Entity *entity, hash_t comp);
+void ECS_EntityDeleteComponent(Entity *entity, hash_t type);
 
 #endif
