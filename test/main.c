@@ -33,7 +33,7 @@ void TestSystem_update(Entity *e, Component **c, TestSystem *system)
 	// c[0] will always be a TestComponent pointer, and thus it is
 	// safe to cast like this.
 	TestComponent *comp = c[0];
-	assert(comp->string);
+	assert(TestComponent_GetString(comp));
 }
 bool TestSystem_event(Event *event, TestSystem *system)
 {
@@ -69,7 +69,7 @@ int main (int argc, const char **argv)
 	res = REGISTER_SYSTEM(ecs, TestSystem, test_sys);
 	assert(res);
 
-	res = ECS_SetThreads(ecs, 3);
+	res = ECS_SetThreads(ecs, 2);
 	assert(res);
 
 	PERF_PRINT_US("Initialization");

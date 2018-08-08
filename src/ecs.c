@@ -13,7 +13,7 @@ ECS* ECS_New()
 		// Systems and component types
 		32, 32,
 		// Number of components / entity
-		16,
+		8,
 		// Number of entities systems will operate on.
 		256
 	};
@@ -136,6 +136,14 @@ void ECS_Delete(ECS *ecs)
 			}
 		}
 		ht_free(ecs->cm_types);
+	}
+
+	if (ecs->buffers) {
+		CommandBuffer *buff;
+		HA_FOR(ecs->buffers, buff, 0) {
+			CommandBuffer_Delete(buff);
+		}
+		ha_free(ecs->buffers);
 	}
 
 	free(ecs);
