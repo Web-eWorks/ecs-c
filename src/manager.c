@@ -90,7 +90,10 @@ Entity* Manager_CreateEntity(ECS *ecs)
 	if (entity == NULL) return NULL;
 
 	entity->id = ent_id;
-	dyn_alloc(&entity->components, ecs->alloc_info.entity_components, sizeof(hash_t));
+	entity->carr_num = 0;
+	entity->carr_cap = ecs->alloc_info.entity_components;
+	entity->components = calloc(entity->carr_cap, sizeof(hash_t));
+	if (!entity->components) ha_delete(ecs->entities, ent_id);
 	entity->ecs = ecs;
 
 	return entity;
@@ -107,16 +110,9 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity)
 {
 	assert(ecs && entity);
 
-	while (entity->components.size > 0) {
-		hash_t type = *(hash_t *)dyn_get(&entity->components, 0);
-
-		// remove the component from the entity
-		dyn_swap(&entity->components, 0, -1);
-		dyn_delete(&entity->components, -1);
-
-		ComponentType *cm_type = ht_get(ecs->cm_types, type);
+	for (size_t idx = 0; idx < entity->carr_num; idx++) {
+		ComponentType *cm_type = ht_get(ecs->cm_types, entity->components[idx]);
 		if (!cm_type) continue;
-
 		Manager_DeleteComponent(ecs, cm_type, entity->id);
 	}
 
@@ -126,7 +122,7 @@ void Manager_DeleteEntity(ECS *ecs, Entity *entity)
 		ha_delete(system->ent_queue, entity->id);
 	}
 
-	dyn_free(&entity->components);
+	free(entity->components);
 	ha_delete(ecs->entities, entity->id);
 }
 

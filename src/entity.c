@@ -57,8 +57,18 @@ Component* ECS_EntityAddComponent(Entity *entity, hash_t type)
 	if (comp) return comp;
 
 	// Otherwise, create the new component.
+	if (entity->carr_num == entity->carr_cap) {
+		// We've got 65,536 components already on the entity, why do you want another?
+		if (entity->carr_cap > 0x7FFF) return NULL;
+		size_t newcap = entity->carr_cap << 1;
+		void *ptr = realloc(entity->components, newcap * sizeof(hash_t));
+		if (!ptr) return NULL;
+		entity->carr_cap = newcap;
+		entity->components = ptr;
+	}
+
 	comp = Manager_CreateComponent(ecs, cm_type, entity->id);
-	dyn_insert(&entity->components, entity->components.size, &type);
+	entity->components[entity->carr_num++] = type;
 
 	// Update systems' entity queues.
 	// We do this at the AddComponent / RemoveComponent step to gain performance.
@@ -93,13 +103,14 @@ void ECS_EntityRemoveComponent(Entity *entity, hash_t type)
 
 	GET_TYPE(entity->ecs, type,);
 
-	int idx = dyn_find(&entity->components, &type);
-	if (idx < 0) return;
+	if (!ht_get(cm_type->components, entity->id)) return;
+	for (size_t idx = 0; idx < entity->carr_num; idx++) {
+		if (entity->components[idx] == type) {
+			// Swap the end component with this one and decrement the list.
+			entity->components[idx] = entity->components[--entity->carr_num];
+		}
+	}
 
 	Manager_DeleteComponent(entity->ecs, cm_type, entity->id);
-
-	dyn_swap(&entity->components, idx, -1);
-	dyn_delete(&entity->components, -1);
-
 	Manager_UpdateCollections(entity->ecs, entity);
 }

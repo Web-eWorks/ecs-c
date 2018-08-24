@@ -7,7 +7,9 @@
 
 struct Entity {
 	hash_t id;
-	dynarray_t components;
+	uint16_t carr_num;
+	uint16_t carr_cap;
+	hash_t *components;
 	ECS *ecs;
 };
 

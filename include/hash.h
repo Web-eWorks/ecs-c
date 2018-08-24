@@ -4,20 +4,18 @@
 #define ECS_HASH_H
 
 #include <stddef.h>
+#include <stdint.h>
 #include "mempool.h"
 
 /*
     The hash type. By default, hashes are stored as 32-bit unsigned integers,
     with a maximum value of ~4 billion entries per hash table.
 
-    If this limit is required to be breached, compile with ECS_BIG_HASH defined
-    to get 64-bit hashes. This should never be required.
+    In the specific use case of this ECS, an average system will run out of
+    memory before breaching the 32-bit limit. At the point a 64-bit hash is
+    required,
 */
-#ifdef ECS_BIG_HASH
-typedef unsigned long int hash_t;
-#else
-typedef unsigned int hash_t;
-#endif
+typedef uint32_t hash_t;
 
 /*
     A hashtable implementation.
