@@ -1,40 +1,46 @@
 #include "entity.h"
 #include "manager.h"
 
-Entity* ECS_EntityNew(ECS *ecs)
+Entity ECS_EntityNew(ECS *ecs, EntityArchetype *archetype)
 {
 	assert(ecs);
 
-	Entity* entity = Manager_CreateEntity(ecs);
-	if (entity == NULL) {
-		fprintf(stderr, "Error creating entity.\n");
-		return NULL;
+	Entity entity = Manager_CreateEntity(ecs);
+	if (archetype) {
+		for (uint32_t idx = 0; idx < archetype->size; idx++) {
+			hash_t id = archetype->components[idx];
+
+			ComponentType *cm_type = ht_get(ecs->cm_types, id);
+			ERR_CONTINUE(cm_type, "Error creating component: unregistered type %08x", id);
+
+			Component *comp = Manager_CreateComponent(ecs, cm_type, entity);
+			ERR_NO_RET(comp, "Error creating component of type %s.\n", cm_type->type);
+		}
+
+		Manager_UpdateCollections(ecs, entity);
 	}
 
 	return entity;
 }
 
-void ECS_EntityDelete(Entity *entity)
-{
-	assert(entity && entity->ecs);
-
-	Manager_DeleteEntity(entity->ecs, entity);
-}
-
-Entity* ECS_EntityGet(ECS *ecs, hash_t id)
+void ECS_EntityDelete(ECS *ecs, Entity entity)
 {
 	assert(ecs);
 
-	Entity *entity = ha_get(ecs->entities, id);
-	return entity;
+	Manager_DeleteEntity(ecs, entity);
 }
 
-const char* ECS_EntityToString(Entity *entity)
+bool ECS_EntityExists(ECS *ecs, Entity entity)
 {
-	assert(entity && entity->ecs);
+	assert(ecs);
 
+	return ha_get(ecs->entities, entity) != NULL;
+}
+
+const char* ECS_EntityToString(Entity entity)
+{
 	char *str = malloc(24);
-	sprintf(str, "Entity (%08x)", entity->id);
+	snprintf(str, 24, "Entity (%08x)", entity);
 
 	return str;
 }
@@ -45,72 +51,69 @@ const char* ECS_EntityToString(Entity *entity)
 		return ret; \
 	}
 
-Component* ECS_EntityAddComponent(Entity *entity, hash_t type)
+Component* ECS_EntityAddComponent(ECS *ecs, Entity entity, hash_t type)
 {
-	assert(entity && entity->ecs);
+	assert(ecs);
 
-	ECS *ecs = entity->ecs;
 	GET_TYPE(ecs, type, NULL);
 
 	// If we already have a component on the entity, return it.
-	Component *comp = ht_get(cm_type->components, entity->id);
+	Component *comp = ht_get(cm_type->components, entity);
 	if (comp) return comp;
 
 	// Otherwise, create the new component.
-	if (entity->carr_num == entity->carr_cap) {
-		// We've got 65,536 components already on the entity, why do you want another?
-		if (entity->carr_cap > 0x7FFF) return NULL;
-		size_t newcap = entity->carr_cap << 1;
-		void *ptr = realloc(entity->components, newcap * sizeof(hash_t));
-		if (!ptr) return NULL;
-		entity->carr_cap = newcap;
-		entity->components = ptr;
-	}
-
-	comp = Manager_CreateComponent(ecs, cm_type, entity->id);
-	entity->components[entity->carr_num++] = type;
+	comp = Manager_CreateComponent(ecs, cm_type, entity);
 
 	// Update systems' entity queues.
 	// We do this at the AddComponent / RemoveComponent step to gain performance.
 	// Adding components to entities takes about 0.5x more time, but it gains an
 	// immense amount of performance on the update step.
-	Manager_UpdateCollections(entity->ecs, entity);
+	Manager_UpdateCollections(ecs, entity);
 
 	return comp;
 }
 
-Component* ECS_EntityGetComponent(Entity *entity, hash_t type)
+Component* ECS_EntityGetComponent(ECS *ecs, Entity entity, hash_t type)
 {
-	assert(entity && entity->ecs);
+	assert(ecs);
 
-	GET_TYPE(entity->ecs, type, NULL);
-	Component *comp = ht_get(cm_type->components, entity->id);
-
-	return comp;
+	GET_TYPE(ecs, type, NULL);
+	return ht_get(cm_type->components, entity);
 }
 
-ComponentID ECS_EntityGetComponentID(Entity *entity, hash_t type)
+void ECS_EntityRemoveComponent(ECS *ecs, Entity entity, hash_t type)
 {
-	assert(entity);
+	assert(ecs);
 
-	ComponentID id = {entity->id, type};
-	return id;
+	GET_TYPE(ecs, type,);
+
+	if (!ht_get(cm_type->components, entity)) return;
+
+	Manager_DeleteComponent(ecs, cm_type, entity);
+	Manager_UpdateCollections(ecs, entity);
 }
 
-void ECS_EntityRemoveComponent(Entity *entity, hash_t type)
+EntityArchetype* ECS_EntityRegisterArchetype(ECS *ecs, const char *name, const char **components)
 {
-	assert(entity && entity->ecs);
+	assert(ecs && name && components);
 
-	GET_TYPE(entity->ecs, type,);
+	EntityArchetype *arch = malloc(sizeof(EntityArchetype));
+	ERR_OOM(arch, "creating EntityArchetype");
 
-	if (!ht_get(cm_type->components, entity->id)) return;
-	for (size_t idx = 0; idx < entity->carr_num; idx++) {
-		if (entity->components[idx] == type) {
-			// Swap the end component with this one and decrement the list.
-			entity->components[idx] = entity->components[--entity->carr_num];
-		}
+	arch->name = malloc(strlen(name) + 1);
+	ERR_OOM(arch->name, "creating EntityArchetype");
+	strcpy((char *)arch->name, name);
+
+	arch->name_hash = hash_string(name);
+
+	arch->size = string_arr_to_type(&arch->components, components);
+	ERR_OOM(arch->components, "creating EntityArchetype");
+
+	for (size_t idx = 0; idx < arch->size; idx++) {
+		hash_t id = arch->components[idx];
+		ComponentType *cm_type = ht_get(ecs->cm_types, id);
+		ERR_RET_NULL(cm_type, "Error creating EntityArchetype: unknown component type %08x", id);
 	}
 
-	Manager_DeleteComponent(entity->ecs, cm_type, entity->id);
-	Manager_UpdateCollections(entity->ecs, entity);
+	return arch;
 }

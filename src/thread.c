@@ -19,9 +19,9 @@ bool UpdateThread_start(ThreadData *data)
     return true;
 }
 
-void UpdateThread_update(ThreadData *data, System *system, Entity *entity)
+void UpdateThread_update(ThreadData *data, System *system, Entity entity)
 {
-    size_t collection_size = system->collection.size;
+    size_t collection_size = system->archetype->size;
     // Resize the buffer if it needs it.
     if (data->collection_size < collection_size) {
         Component **ptr = calloc(collection_size, sizeof(Component *));
@@ -38,7 +38,7 @@ void UpdateThread_update(ThreadData *data, System *system, Entity *entity)
     // Because we're not inserting or deleting components from the ECS or entity
     // during threaded update steps, getting components is thread safe.
 	for (size_t idx = 0; idx < collection_size; idx++) {
-        ComponentID id = {entity->id, system->collection.types[idx]};
+        ComponentID id = {entity, system->archetype->components[idx]};
         data->collection[idx] = Manager_GetComponentByID(data->ecs, id);
 	}
 
@@ -72,18 +72,18 @@ void* UpdateThread_main(void *arg)
         size_t end = data->range.end;
         THREAD_UNLOCK(data);
 
-        if (system->collection.size == 0) {
-            UpdateThread_update(data, system, NULL);
+        if (system->archetype->size == 0) {
+            UpdateThread_update(data, system, 0);
             continue;
         }
 
         hash_t *hash;
         // Update the assigned chunk of the system.
         if (end == 0) HA_FOR(ha, hash, start) {
-            UpdateThread_update(data, system, ha_get(entities, *hash));
+            UpdateThread_update(data, system, idx);
         }
         else HA_RANGE_FOR(ha, hash, start, end) {
-            UpdateThread_update(data, system, ha_get(entities, *hash));
+            UpdateThread_update(data, system, idx);
         }
     }
 

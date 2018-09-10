@@ -1,40 +1,6 @@
 #include "system.h"
 #include "manager.h"
 
-static int string_arr_to_type(hash_t **dst, const char **src)
-{
-    if (!dst || !src) return -1;
-
-    size_t idx = 0;
-    while(src[idx]) idx++;
-
-    hash_t *ptr = calloc(idx, sizeof(hash_t));
-    if (!ptr) return -1;
-
-    dst[0] = ptr;
-    for (size_t _i = 0; _i < idx; _i++) {
-        ptr[_i] = hash_string(src[_i]);
-    }
-
-    return idx;
-}
-
-bool System_CreateCollection(SystemCollection *coll, const char **collection)
-{
-    coll->size = string_arr_to_type(&coll->types, collection);;
-    if (!coll->types) return false;
-    coll->comps = calloc(coll->size, sizeof(Component*));
-    if (!coll->comps) return false;
-
-    return true;
-}
-
-void System_DeleteCollection(SystemCollection *coll)
-{
-    free(coll->types);
-    free(coll->comps);
-}
-
 bool ECS_SystemRegister(ECS *ecs, const SystemRegistryInfo *reg, void *data)
 {
     assert(ecs && reg->name && reg->update);
@@ -55,8 +21,7 @@ bool ECS_SystemRegister(ECS *ecs, const SystemRegistryInfo *reg, void *data)
     info.up_func = reg->update;
     info.ev_func = reg->event;
 
-    SystemCollection coll = { 0 };
-    info.collection = coll;
+    info.archetype = reg->archetype;
 
     info.is_thread_safe = update_info->IsThreadSafe
         && !update_info->UpdatesOtherEntities
@@ -70,15 +35,6 @@ bool ECS_SystemRegister(ECS *ecs, const SystemRegistryInfo *reg, void *data)
 
     info.ev_queue = EventQueue_New();
     info.ent_queue = NULL;
-
-    // Convert the collection to type ids for speed.
-    if (reg->collection) {
-        if (!System_CreateCollection(&info.collection, reg->collection)) {
-            free((char *)info.name);
-            System_DeleteCollection(&info.collection);
-            return false;
-        }
-    }
 
     return Manager_RegisterSystem(ecs, &info);
 }

@@ -24,7 +24,7 @@ const char* TestComponent_GetString(TestComponent *comp)
 }
 
 SYSTEM_IMPL(TestSystem)
-void TestSystem_update(Entity *e, Component **c, TestSystem *system)
+void TestSystem_update(Entity e, Component **c, TestSystem *system)
 {
 	// This will always assert true, but we check it here anyways.
 	assert(c[0]);
@@ -40,9 +40,9 @@ bool TestSystem_event(Event *event, TestSystem *system)
 	return false;
 }
 
-const char *TestSystem_collection[] = {
-	ComponentRead(TestComponent),
-	NULL
+EntityArchetype *TestEntityArchetype;
+const char *TestEntity_components[] = {
+	"TestComponent", NULL
 };
 
 const SystemUpdateInfo TestSystem_update_info = {
@@ -65,6 +65,8 @@ int main (int argc, const char **argv)
 	bool res = REGISTER_COMPONENT(ecs, TestComponent);
 	assert(res);
 
+	TestSystem_reg.archetype = ECS_EntityRegisterArchetype(ecs, "TestEntityArchetype", TestEntity_components);
+
 	TestSystem *test_sys = malloc(sizeof(TestSystem));
 	res = REGISTER_SYSTEM(ecs, TestSystem, test_sys);
 	assert(res);
@@ -76,13 +78,12 @@ int main (int argc, const char **argv)
 	printf("> Initialization done (1/4).\n");
 
 	PERF_UPDATE();
-	Entity *entity;
+	Entity entity;
 	TestComponent *comp;
 	hash_t comp_type = COMPONENT_ID(TestComponent);
 	for (int i = 0; i < TEST_ENTITIES; i++) {
-		entity = ECS_EntityNew(ecs);
-		comp = ECS_EntityAddComponent(entity, comp_type);
-		assert(entity);
+		entity = ECS_EntityNew(ecs, NULL);
+		comp = ECS_EntityAddComponent(ecs, entity, comp_type);
 		assert(comp);
 	}
 

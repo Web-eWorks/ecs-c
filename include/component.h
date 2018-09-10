@@ -5,11 +5,6 @@
 
 #include "ecs.h"
 
-struct ComponentID {
-	hash_t id;
-	hash_t type;
-};
-
 /*
 	Returns a string representation of a component, suitable for printing to the
 	user.

@@ -1,5 +1,23 @@
 #include "manager.h"
 
+int string_arr_to_type(hash_t **dst, const char **src)
+{
+    if (!dst || !src) return -1;
+
+    size_t idx = 0;
+    while(src[idx]) idx++;
+
+    hash_t *ptr = calloc(idx, sizeof(hash_t));
+    if (!ptr) return -1;
+
+    *dst = ptr;
+    for (size_t _i = 0; _i < idx; _i++) {
+        ptr[_i] = hash_string(src[_i]);
+    }
+
+    return idx;
+}
+
 // Get a component type's info.
 ComponentType* Manager_GetComponentType(ECS *ecs, hash_t type)
 {
@@ -81,49 +99,51 @@ void Manager_DeleteComponent(ECS *ecs, ComponentType *type, hash_t id)
 
 /* -------------------------------------------------------------------------- */
 
-Entity* Manager_CreateEntity(ECS *ecs)
+// An entity is literally a 32-bit integer. We drop it in the entity list for
+// reasons that need to be re-evaluated.
+//
+// It might be possible to replace the entity list with a simple gap-spanning
+// tracker for free IDs. This would make entity deletion slightly more complex,
+// but would likely significantly reduce the amount of complexity and memory
+// required to create and manage entities.
+//
+// This function should not be called from a thread that does not have a lock
+// on the entity list.
+//
+// Due to the time cost of acquiring a lock, locking should be performed in a
+// higher-level logic structure, preferably one that handles creating multiple
+// entities at once.
+Entity Manager_CreateEntity(ECS *ecs)
 {
 	assert(ecs);
 
-	hash_t ent_id;
-	Entity *entity = ha_insert_free(ecs->entities, &ent_id, NULL);
-	if (entity == NULL) return NULL;
-
-	entity->id = ent_id;
-	entity->carr_num = 0;
-	entity->carr_cap = ecs->alloc_info.entity_components;
-	entity->components = calloc(entity->carr_cap, sizeof(hash_t));
-	if (!entity->components) ha_delete(ecs->entities, ent_id);
-	entity->ecs = ecs;
+	hash_t entity;
+	(void) ha_insert_free(ecs->entities, &entity, NULL);
 
 	return entity;
 }
 
-Entity* Manager_GetEntity(ECS *ecs, hash_t id)
+// This function should not be called on a thread that does not have a global lock
+// on the ECS.
+void Manager_DeleteEntity(ECS *ecs, Entity entity)
 {
 	assert(ecs);
 
-	return ha_get(ecs->entities, id);
-}
-
-void Manager_DeleteEntity(ECS *ecs, Entity *entity)
-{
-	assert(ecs && entity);
-
-	for (size_t idx = 0; idx < entity->carr_num; idx++) {
-		ComponentType *cm_type = ht_get(ecs->cm_types, entity->components[idx]);
-		if (!cm_type) continue;
-		Manager_DeleteComponent(ecs, cm_type, entity->id);
+	// Because we don't keep state on the entity, we iterate through all
+	// possible components and delete the ones matching the entity.
+	HT_FOR(ecs->cm_types, 0) {
+		ComponentType *cm_type = ht_get(ecs->cm_types, idx);
+		if (ht_get(cm_type->components, entity))
+			Manager_DeleteComponent(ecs, cm_type, entity);
 	}
 
-	// Remove the entity from the system's queue.
+	// Remove the entity from system queues.
 	HT_FOR(ecs->systems, 0) {
 		System *system = ht_get(ecs->systems, idx);
-		ha_delete(system->ent_queue, entity->id);
+		ha_delete(system->ent_queue, entity);
 	}
 
-	free(entity->components);
-	ha_delete(ecs->entities, entity->id);
+	ha_delete(ecs->entities, entity);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -136,13 +156,6 @@ bool Manager_RegisterSystem(ECS *ecs, System *info)
 	if (!info->ent_queue) return false;
 
 	System *_info = ht_insert(ecs->systems, hash_string(info->name), info);
-
-	if (!_info) {
-		free((char *)info->name);
-		free((char *)info->collection.types);
-		free((char *)info->collection.comps);
-		ha_free(info->ent_queue);
-	}
 
 	return _info ? true : false;
 }
@@ -160,35 +173,34 @@ void Manager_UnregisterSystem(ECS *ecs, System *system)
 
 	EventQueue_Free(system->ev_queue);
 	free((char *)system->name);
-	System_DeleteCollection(&system->collection);
 	ha_free(system->ent_queue);
 
 	ht_delete(ecs->systems, system->name_hash);
 }
 
-void Manager_UpdateCollections(ECS *ecs, Entity *entity)
+void Manager_UpdateCollections(ECS *ecs, Entity entity)
 {
 	HT_FOR(ecs->systems, 0) {
 		System *system = ht_get(ecs->systems, idx);
 		if (Manager_ShouldSystemQueueEntity(ecs, system, entity)) {
-			ha_insert_free(system->ent_queue, NULL, &entity->id);
+			ha_insert_free(system->ent_queue, NULL, &entity);
 		}
 		else {
-			ha_delete(system->ent_queue, entity->id);
+			ha_delete(system->ent_queue, entity);
 		}
 	}
 }
 
-bool Manager_ShouldSystemQueueEntity(ECS *ecs, System *system, Entity *entity)
+bool Manager_ShouldSystemQueueEntity(ECS *ecs, System *system, Entity entity)
 {
-	assert(ecs && system && entity);
+	assert(ecs && system);
 
 	// If we don't want at least one component, we only update the system once.
-	if (system->collection.size < 1) return false;
+	if (system->archetype->size < 1) return false;
 
 	bool should_queue = true;
-	for (size_t idx = 0; idx < system->collection.size; idx++) {
-		ComponentID id = {entity->id, system->collection.types[idx]};
+	for (size_t idx = 0; idx < system->archetype->size; idx++) {
+		ComponentID id = {entity, system->archetype->components[idx]};
 		if (!Manager_GetComponentByID(ecs, id)) {
 			should_queue = false;
 			break;
@@ -198,18 +210,21 @@ bool Manager_ShouldSystemQueueEntity(ECS *ecs, System *system, Entity *entity)
 	return should_queue;
 }
 
-void Manager_UpdateSystem(ECS *ecs, System *system, Entity *entity)
+void Manager_UpdateSystem(ECS *ecs, System *system, Entity entity)
 {
-	assert(ecs && system && system->collection.size > 0 && entity);
+	assert(ecs && system && system->archetype->size > 0);
+
+	const size_t size = system->archetype->size;
+	Component *components[size];
 
 	// Systems must have an update function to be registered, and entities don't
 	// get in the queue without having all the required components.
-	for (size_t idx = 0; idx < system->collection.size; idx++) {
-		ComponentID id = {entity->id, system->collection.types[idx]};
-		system->collection.comps[idx] = Manager_GetComponentByID(ecs, id);
+	for (size_t idx = 0; idx < size; idx++) {
+		ComponentID id = {entity, system->archetype->components[idx]};
+		components[idx] = Manager_GetComponentByID(ecs, id);
 	}
 
-	system->up_func(entity, system->collection.comps, system->udata);
+	system->up_func(entity, components, system->udata);
 }
 
 void Manager_SystemEvent(ECS *ecs, System *system, Event *ev)

@@ -19,8 +19,8 @@
 typedef struct Event Event;
 
 /*
-    A component is an encapsulation of a single set of data, usually related to
-    a single purpose. Components are implemented as black-box data initialized
+    A component is an encapsulation of a set of data, usually related to a
+    single purpose. Components are implemented as black-box data initialized
     and managed by external code, but allocated and stored by the ECS.
 
     Components are stored in arrays of type, indexed by their owning entity's ID.
@@ -30,12 +30,23 @@ typedef void Component;
 /*
     A simple way to refer to components.
 */
-typedef struct ComponentID ComponentID;
+typedef struct {
+	hash_t id;
+	hash_t type;
+} ComponentID;
 
 /*
-    The basic unit of objects. Each entity may contain one or more components.
+    The basic unit of objects. Each entity may be associated with one or more
+    components.
 */
-typedef struct Entity Entity;
+typedef hash_t Entity;
+
+/*
+    Information about a collection of components, called an Archetype. Systems
+    operate on these, and they are used as a fast way to create entities with a
+    pre-defined component structure.
+*/
+typedef struct EntityArchetype EntityArchetype;
 
 /*
     An encapsulation of update code.
@@ -48,12 +59,12 @@ typedef struct System System;
 typedef struct ECS ECS;
 
 /*
-    The performance of the ECS is affected by the contiguous nature of it's
-    data storage.
+    The performance of the ECS is defined by the contiguous nature of its data
+    storage.
 
     The default values provide a fairly good tradeoff between memory
-    fragmentation and consumption, but an application may pass its own values
-    for these allocations.
+    fragmentation and consumption, but an application may wish to pass its own
+    values for these allocations.
 */
 typedef struct {
     size_t components;

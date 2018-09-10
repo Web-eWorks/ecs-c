@@ -112,7 +112,7 @@ void ECS_Delete(ECS *ecs)
 	// the extreme majority of all components.
 	if (ecs->entities) {
 		Entity *entity;
-		HA_FOR(ecs->entities, entity, 0) ECS_EntityDelete(entity);
+		HA_FOR(ecs->entities, entity, 0) ECS_EntityDelete(ecs, idx);
 		ha_free(ecs->entities);
 	}
 
@@ -259,7 +259,7 @@ void ECS_DistributeSystemUpdate(ECS *ecs, System *system)
 
 	// If we don't have enough to justify queuing to more than one thread, (or
 	// only have one thread) just dispatch the queue.
-	if (system->collection.size == 0 || ecs->num_threads == 1 || ents < THREAD_MIN_LOAD) {
+	if (system->archetype->size == 0 || ecs->num_threads == 1 || ents < THREAD_MIN_LOAD) {
 		distribute_to_thread(ecs, ecs->threads[0], system, 0, 0);
 		return;
 	}
@@ -281,18 +281,15 @@ void ECS_UpdateSystem(ECS *ecs, System *system)
 		ECS_DistributeSystemUpdate(ecs, system);
 	}
 	// Update the system with all entities that have the correct components.
-	else if (system->collection.size > 0) {
+	else if (system->archetype->size > 0) {
 		hash_t *hash;
 		HA_FOR(system->ent_queue, hash, 0) {
-			Entity *entity = ha_get(ecs->entities, *hash);
-			if (!entity) continue;
-
-			Manager_UpdateSystem(ecs, system, entity);
+			Manager_UpdateSystem(ecs, system, idx);
 		}
 	}
 	// If the system doesn't operate on components, we only update it once.
 	else {
-		Manager_UpdateSystem(ecs, system, NULL);
+		Manager_UpdateSystem(ecs, system, 0);
 	}
 
 	if (system->ev_func) {

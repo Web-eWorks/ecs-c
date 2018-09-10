@@ -15,6 +15,7 @@
 
 #include "ecs.h"
 #include "command_buffer.h"
+#include "macros.h"
 
 typedef struct SystemCollection SystemCollection;
 typedef struct ComponentType ComponentType;
@@ -62,10 +63,12 @@ struct ThreadData {
 
 void ThreadData_delete(ThreadData *data);
 
-struct SystemCollection {
-	size_t size;
-	hash_t *types;
-	Component **comps;
+struct EntityArchetype {
+	const char *name;
+	hash_t name_hash;
+
+	uint32_t size;
+	hash_t* components;
 };
 
 struct System {
@@ -78,7 +81,7 @@ struct System {
 
 	bool is_thread_safe;
 
-	SystemCollection collection;
+	EntityArchetype *archetype;
 	hash_t *dependencies;
 	size_t deps_size;
 
@@ -98,12 +101,9 @@ struct ComponentType {
 /* -------------------------------------------------------------------------- */
 
 void ECS_Error(ECS *ecs, const char *msg);
-void ECS_DispatchSystemUpdate(ECS *ecs, System *system, Entity *entity);
+void ECS_DispatchSystemUpdate(ECS *ecs, System *system, Entity entity);
 
 void* UpdateThread_main(void *arg);
-
-bool System_CreateCollection(SystemCollection *coll, const char **collection);
-void System_DeleteCollection(SystemCollection *coll);
 
 /* -------------------------------------------------------------------------- */
 
@@ -118,18 +118,23 @@ Component* Manager_GetComponent(ECS *ecs, ComponentType *type, hash_t id);
 Component* Manager_GetComponentByID(ECS *ecs, ComponentID id);
 void Manager_DeleteComponent(ECS *ecs, ComponentType *type, hash_t id);
 
-Entity* Manager_CreateEntity(ECS *ecs);
-Entity* Manager_GetEntity(ECS *ecs, hash_t id);
-void Manager_DeleteEntity(ECS *ecs, Entity *entity);
+Entity Manager_CreateEntity(ECS *ecs);
+void Manager_DeleteEntity(ECS *ecs, Entity entity);
 
 bool Manager_RegisterSystem(ECS *ecs, System *info);
 System* Manager_GetSystem(ECS *ecs, const char *name);
 void Manager_UnregisterSystem(ECS *ecs, System *system);
 
-void Manager_UpdateCollections(ECS *ecs, Entity *entity);
-bool Manager_ShouldSystemQueueEntity(ECS *ecs, System *sys, Entity *entity);
-void Manager_UpdateSystem(ECS *ecs, System *info, Entity *entity);
+void Manager_UpdateCollections(ECS *ecs, Entity entity);
+bool Manager_ShouldSystemQueueEntity(ECS *ecs, System *sys, Entity entity);
+void Manager_UpdateSystem(ECS *ecs, System *info, Entity entity);
 void Manager_SystemEvent(ECS *ecs, System *info, Event *event);
+
+/* -------------------------------------------------------------------------- */
+
+// Converts a NULL-terminated list of strings into an explicit-size list of
+// hash IDs. The pointer to the generated array is stored in dst.
+int string_arr_to_type(hash_t **dst, const char **src);
 
 /* -------------------------------------------------------------------------- */
 

@@ -5,28 +5,20 @@
 
 #include "ecs.h"
 
-struct Entity {
-	hash_t id;
-	uint16_t carr_num;
-	uint16_t carr_cap;
-	hash_t *components;
-	ECS *ecs;
-};
-
 /*
-	Creates a new entity.
+	Creates a new entity with a set of components.
 */
-Entity* ECS_EntityNew(ECS *ecs);
+Entity ECS_EntityNew(ECS *ecs, EntityArchetype *archetype);
 
 /*
 	Deletes an entity. All components attached to the entity are also freed.
 */
-void ECS_EntityDelete(Entity* entity);
+void ECS_EntityDelete(ECS *ecs, Entity entity);
 
 /*
-	Gets an entity by ID. Returns NULL if no entity was found.
+	Checks if the given entity exists.
 */
-Entity* ECS_EntityGet(ECS *ecs, hash_t id);
+bool ECS_EntityExists(ECS *ecs, Entity entity);
 
 /*
 	Generate a string representation of an entity, suitable for display to the
@@ -34,29 +26,40 @@ Entity* ECS_EntityGet(ECS *ecs, hash_t id);
 
 	The returned string must be freed by the caller.
 */
-const char* ECS_EntityToString(Entity *entity);
+const char* ECS_EntityToString(Entity entity);
 
 /* -------------------------------------------------------------------------- */
 
 /*
 	Creates a new component and adds it to the entity.
 */
-Component* ECS_EntityAddComponent(Entity *entity, hash_t type);
+Component* ECS_EntityAddComponent(ECS *ecs, Entity entity, hash_t type);
 
 /*
 	Return a component's data if it is attached to this entity.
 */
-Component* ECS_EntityGetComponent(Entity *entity, hash_t type);
+Component* ECS_EntityGetComponent(ECS *ecs, Entity entity, hash_t type);
 
 /*
 	Returns the ComponentID of the specified component attached to this entity.
 	Does not check if there is a component of that type, simply returns an ID.
 */
-ComponentID ECS_EntityGetComponentID(Entity *entity, hash_t type);
+inline ComponentID ECS_EntityGetComponentID(Entity entity, hash_t type)
+{
+    ComponentID id = { entity, type };
+    return id;
+}
 
 /*
 	Remove a component from the entity and free the component's data.
 */
-void ECS_EntityDeleteComponent(Entity *entity, hash_t type);
+void ECS_EntityDeleteComponent(ECS *ecs, Entity entity, hash_t type);
+
+/* -------------------------------------------------------------------------- */
+
+/*
+	Registers and creates an entity archetype.
+*/
+EntityArchetype* ECS_EntityRegisterArchetype(ECS *ecs, const char *name, const char** components);
 
 #endif
