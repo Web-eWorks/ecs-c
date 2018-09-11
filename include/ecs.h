@@ -31,19 +31,9 @@ void ECS_Delete(ECS *ecs);
 bool ECS_SetThreads(ECS *ecs, size_t threads);
 
 /*
-    Trigger an ECS update.
+    Run an update on all systems that need it.
 */
-bool ECS_UpdateBegin(ECS *ecs);
-
-/*
-    Update all systems.
-*/
-bool ECS_UpdateSystems(ECS *ecs);
-
-/*
-    End an ECS update.
-*/
-void ECS_UpdateEnd(ECS *ecs);
+void ECS_Update(ECS *ecs);
 
 CommandBuffer* CommandBuffer_New(ECS *ecs);
 void CommandBuffer_Delete(CommandBuffer *buff);

@@ -27,8 +27,13 @@ struct ECS {
 	// component type registry
 	hashtable_t *cm_types;
 
+	// a pre-calculated table containing systems arranged in a way
+	// that respects system dependencies.
+	dynarray_t system_order;
+
+	// a table containing system queuing information.
 	dynarray_t update_systems;
-	ECS_AllocInfo alloc_info;
+	bool update_systems_dirty;
 
 	bool is_updating;
 	hasharray_t *buffers;
@@ -39,6 +44,8 @@ struct ECS {
 
 	pthread_mutex_t global_lock;
 	pthread_cond_t ready_cond;
+
+	ECS_AllocInfo alloc_info;
 };
 
 struct ThreadData {
@@ -98,12 +105,27 @@ struct ComponentType {
 	hashtable_t *components;
 };
 
+typedef enum {
+	SYSTEM_UPDATE_BARRIER = 0,
+	SYSTEM_UPDATE_ONTHREAD,
+	SYSTEM_UPDATE_QUEUED
+	// TODO: more items needed?
+} SystemQueueType;
+
+typedef struct {
+	SystemQueueType type;
+	hash_t start;
+	hash_t end;
+	System *system;
+} SystemQueueItem;
+
 /* -------------------------------------------------------------------------- */
 
 void ECS_Error(ECS *ecs, const char *msg);
-void ECS_DispatchSystemUpdate(ECS *ecs, System *system, Entity entity);
 
-void* UpdateThread_main(void *arg);
+void ECS_ArrangeSystems(ECS *ecs);
+
+ThreadData* ECS_NewThread(ECS *ecs);
 
 /* -------------------------------------------------------------------------- */
 

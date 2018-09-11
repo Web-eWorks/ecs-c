@@ -17,14 +17,14 @@ struct Event {
     hash_t target;
     // A pointer to some userdata the event carries.
     EventData *data;
+    // Whether the Event code should free the event's data.
+    bool should_free;
 };
 
 /*
     An Event Queue is a simple FIFO of Events.
 */
-typedef struct {
-    dynarray_t evs;
-} EventQueue;
+typedef dynarray_t EventQueue;
 
 /*
     Allocate a new EventQueue.
@@ -45,9 +45,19 @@ void EventQueue_Free(EventQueue *queue);
 Event* EventQueue_Peek(EventQueue *queue, int idx);
 
 /*
-    Remove an event from the front of the queue.
+    Remove an event from the front of the queue. If out_event is not NULL,
+    it is the caller's responsibility to handle freeing the data ptr.
 */
 bool EventQueue_Pop(EventQueue *queue, Event *out_event);
+
+/*
+    Add an event to the queue.
+*/
 void EventQueue_Push(EventQueue *queue, Event *event);
+
+/*
+    Remove all events from the queue.
+*/
+void EventQueue_Clear(EventQueue *queue);
 
 #endif /* end of include guard: ECS_EVENT_H */

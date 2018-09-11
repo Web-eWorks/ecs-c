@@ -92,11 +92,7 @@ int main (int argc, const char **argv)
 
 	PERF_UPDATE();
 	for (int i = 0; i < TEST_REPS; i++) {
-		ECS_UpdateBegin(ecs);
-
-		ECS_UpdateSystems(ecs);
-
-		ECS_UpdateEnd(ecs);
+		ECS_Update(ecs);
 	}
 	PERF_PRINT_MS("Updates");
 

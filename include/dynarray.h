@@ -111,4 +111,6 @@ bool dyn_reserve(dynarray_t *arr, size_t newcap);
 */
 bool dyn_resize(dynarray_t *arr, size_t newcap);
 
+#define DYN_FOR(arr, start) for (size_t idx = start; idx < (arr).size; idx++)
+
 #endif

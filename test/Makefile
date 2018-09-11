@@ -4,7 +4,7 @@ HEADERS = include/ecs.h $(wildcard test/*.h)
 OUT = main
 
 CFLAGS += -Iinclude -Itest
-LDFLAGS += -L. -lecs -lz -lpthread
+LDFLAGS += -L. -lecs -lz -lpthread -lm
 
 .PHONY: release debug clean
 debug release: $(OUT)

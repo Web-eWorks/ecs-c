@@ -6,5 +6,5 @@ runtime stability, and should be considered a learning or reference project.
 
 # License
 
-This project is licensed under the MIT License, copyright Web eWorks, LTD. All
-inquiries should be directed to [<info@web-eworks.com>](mailto:info@web-eworks.com).
+This project is licensed under the MIT License, Copyright © 2018, Web eWorks, LTD.
+All inquiries should be directed to [<info@web-eworks.com>](mailto:info@web-eworks.com).

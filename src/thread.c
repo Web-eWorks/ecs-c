@@ -5,6 +5,23 @@
 
 #define THREAD_WAIT(data) pthread_cond_wait(&data->update_cond, &data->update_mutex)
 
+void* UpdateThread_main(void *arg);
+
+ThreadData* ECS_NewThread(ECS *ecs)
+{
+    ThreadData *data = malloc(sizeof(ThreadData));
+    if (!data) return NULL;
+
+    data->ecs = ecs;
+    data->running = false;
+    data->ready = false;
+    pthread_mutex_init(&data->update_mutex, NULL);
+    pthread_cond_init(&data->update_cond, NULL);
+    pthread_create(&data->thread, NULL, &UpdateThread_main, data);
+
+    return data;
+}
+
 bool UpdateThread_start(ThreadData *data)
 {
     assert(data && data->ecs);

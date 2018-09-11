@@ -35,7 +35,8 @@ ECS* ECS_CustomNew(const ECS_AllocInfo *alloc)
 
 	ecs->systems = ht_alloc(alloc->systems, sizeof(System));
 	ok = ok && ecs->systems;
-	ok = ok && dyn_alloc(&ecs->update_systems, alloc->systems, sizeof(System *));
+	ok = ok && dyn_alloc(&ecs->system_order, alloc->systems, sizeof(System *));
+	ok = ok && dyn_alloc(&ecs->update_systems, alloc->systems, sizeof(SystemQueueItem));
 
 	ecs->cm_types = ht_alloc(alloc->cm_types, sizeof(ComponentType));
 	ecs->alloc_info = *alloc;
@@ -74,22 +75,16 @@ bool ECS_SetThreads(ECS *ecs, size_t threads)
 	ThreadData **ptr = realloc(ecs->threads, sizeof(ThreadData *) * threads);
 	if (!ptr) return false;
 	for (size_t idx = ecs->num_threads; idx < threads; idx++) {
-		ThreadData *data = ptr[idx] = malloc(sizeof(ThreadData));
-		if (!data) {
-			ECS_Error(ecs, "Could not allocate memory for new threads!");
-			return false;
-		}
-
-		data->ecs = ecs;
-		data->running = false;
-		data->ready = false;
-		pthread_mutex_init(&data->update_mutex, NULL);
-		pthread_cond_init(&data->update_cond, NULL);
-		pthread_create(&data->thread, NULL, &UpdateThread_main, data);
+		ptr[idx] = ECS_NewThread(ecs);
+		ERR_RET_ZERO(ptr[idx], "Error creating new thread %ld.\n", idx);
 	}
 
 	ecs->num_threads = threads;
 	ecs->threads = ptr;
+
+	// We've changed the number of threads, so we need to rearrange the queue to
+	// take advantage of that.
+	ecs->update_systems_dirty = true;
 
 	return true;
 }
@@ -98,6 +93,7 @@ void ECS_Delete(ECS *ecs)
 {
 	assert(ecs);
 
+	// Clean up threads.
 	if (ecs->num_threads > 0 && ecs->threads) {
 		for (size_t idx = 0; idx < ecs->num_threads; idx++) {
 			pthread_cancel(ecs->threads[idx]->thread);
@@ -124,6 +120,7 @@ void ECS_Delete(ECS *ecs)
 		ht_free(ecs->systems);
 	}
 	dyn_free(&ecs->update_systems);
+	dyn_free(&ecs->system_order);
 
 	// There are only a handful of component deletions to perform at this point.
 	if (ecs->cm_types) {
@@ -138,6 +135,7 @@ void ECS_Delete(ECS *ecs)
 		ht_free(ecs->cm_types);
 	}
 
+	// Destroy the command buffers
 	if (ecs->buffers) {
 		CommandBuffer *buff;
 		HA_FOR(ecs->buffers, buff, 0) {
@@ -156,31 +154,9 @@ void ECS_Error(ECS *ecs, const char *error)
 	ECS_UNLOCK(ecs);
 }
 
-/*
-	TODO: Allow systems to define their order of execution, and handle circular
-	referencing in the systems.
-*/
-void ECS_ArrangeSystems(ECS *ecs)
-{
+/* -------------------------------------------------------------------------- */
 
-}
-
-// Create entity queues for each system, resolve the order of systems, etc.
-bool ECS_UpdateBegin(ECS *ecs)
-{
-	// Iterate systems.
-	HT_FOR(ecs->systems, 0) {
-		System *system = ht_get(ecs->systems, idx);
-		// queue the system for updates
-		dyn_insert(&ecs->update_systems, ecs->update_systems.size, &system);
-	}
-
-	ECS_ArrangeSystems(ecs);
-
-	return true;
-}
-
-#define THREAD_MIN_LOAD 100
+#define THREAD_MIN_LOAD 1000
 
 // wait for all threads to finish
 static void synchronize_threads(ECS *ecs)
@@ -195,14 +171,14 @@ static void synchronize_threads(ECS *ecs)
 	}
 }
 
-static void distribute_to_thread(ECS *ecs, ThreadData *thread, System *system, hash_t start, hash_t end)
+static void distribute_to_thread(ECS *ecs, ThreadData *thread, SystemQueueItem *item)
 {
 	pthread_mutex_lock(&thread->update_mutex);
 
 	// Pass along the data.
-	thread->system = system;
-	thread->range.start = start;
-	thread->range.end = end;
+	thread->system = item->system;
+	thread->range.start = item->start;
+	thread->range.end = item->end;
 	thread->ready = false;
 
 	UNREADY_THREAD(ecs);
@@ -251,54 +227,93 @@ static bool ready_thread(ECS *ecs, size_t *thread_idx)
 	return false;
 }
 
-// TODO: we assume all threads are ready here - rewrite this to support unready
-// threads from multiple-system queueing.
-void ECS_DistributeSystemUpdate(ECS *ecs, System *system)
+// TODO: this is O(n^2) with regards to the length of the archetypes involved
+// Fix this yesterday.
+static bool systems_in_parallel(System *a, System *b)
 {
-	size_t ents = ha_len(system->ent_queue) / ecs->num_threads;
-
-	// If we don't have enough to justify queuing to more than one thread, (or
-	// only have one thread) just dispatch the queue.
-	if (system->archetype->size == 0 || ecs->num_threads == 1 || ents < THREAD_MIN_LOAD) {
-		distribute_to_thread(ecs, ecs->threads[0], system, 0, 0);
-		return;
+	// Essentially, just see if there's any overlap between the two.
+	for (size_t idxa = 0; idxa < a->archetype->size; idxa++) {
+		for (size_t idxb = 0; idxb < b->archetype->size; idxb++) {
+			if (a->archetype->components[idxa] == b->archetype->components[idxb])
+				return false;
+		}
 	}
 
-	hash_t last = 0;
-	// TODO: verify that all entities in the queue are actually getting updated,
-	// and that we're not losing one at the beginning or end.
-	for (size_t idx = 0; idx < ecs->num_threads; idx++) {
-		hash_t curr = last + ents;
-		distribute_to_thread(ecs, ecs->threads[idx], system, last, curr);
-		last = curr;
-	}
+	return true;
 }
 
-// Update a single system.
-void ECS_UpdateSystem(ECS *ecs, System *system)
+static bool system_requires_barrier(ECS *ecs, System *system)
 {
-	if (ecs->num_threads > 0 && system->is_thread_safe) {
-		ECS_DistributeSystemUpdate(ecs, system);
-	}
-	// Update the system with all entities that have the correct components.
-	else if (system->archetype->size > 0) {
-		hash_t *hash;
-		HA_FOR(system->ent_queue, hash, 0) {
-			Manager_UpdateSystem(ecs, system, idx);
-		}
-	}
-	// If the system doesn't operate on components, we only update it once.
-	else {
-		Manager_UpdateSystem(ecs, system, 0);
+	// Walk back through the queue until we find the start, a barrier, or a
+	// system that would cause a conflict.
+	if (!system->is_thread_safe) return true;
+
+	dynarray_t *arr = &ecs->update_systems;
+	for (size_t idx = arr->size - 1; idx > 0; --idx) {
+		SystemQueueItem *item = dyn_get(arr, idx);
+		if (item->type == SYSTEM_UPDATE_BARRIER) return false;
+		if (!systems_in_parallel(system, item->system)) return true;
 	}
 
-	if (system->ev_func) {
-		Event *ev = NULL;
-		while ((ev = EventQueue_Peek(system->ev_queue, 0)) != NULL) {
-			Manager_SystemEvent(ecs, system, ev);
-			EventQueue_Pop(system->ev_queue, NULL);
+	return false;
+}
+
+/*
+	TODO: arrange systems in the most optimal way.
+	TODO: handle circular referencing in the systems.
+*/
+void ECS_ArrangeSystems(ECS *ecs)
+{
+	bool is_thread_safe = true;
+
+	#define INSERT(t) dyn_insert(&ecs->update_systems, ecs->update_systems.size, &t);
+
+	DYN_FOR(ecs->system_order, 0) {
+		System *system = *(System **)dyn_get(&ecs->system_order, idx);
+
+		SystemQueueItem item = {
+			SYSTEM_UPDATE_QUEUED,
+			0, ha_len(system->ent_queue),
+			system
+		};
+
+		// Insert a barrier if this system conflicts
+		if (!is_thread_safe && system_requires_barrier(ecs, system)) {
+			SystemQueueItem barrier = {SYSTEM_UPDATE_BARRIER, 0, 0, NULL};
+			INSERT(barrier);
+			is_thread_safe = true;
+		}
+
+		// If we're onthread, we've got a barrier up and can safely queue here.
+		if (!system->is_thread_safe) {
+			item.type = SYSTEM_UPDATE_ONTHREAD;
+			INSERT(item);
+			continue;
+		}
+
+		// Otherwise, we've got threads running in the background.
+		is_thread_safe = false;
+
+		// If we have enough items, split them across multiple threads.
+		if (item.end > THREAD_MIN_LOAD) {
+			// Ensure that we're splitting things up relatively evenly.
+			size_t num_threads = round((float)item.end / THREAD_MIN_LOAD);
+			if (num_threads > ecs->num_threads) num_threads = ecs->num_threads;
+
+			// Insert jobs for each thread.
+			size_t ents = item.end / num_threads;
+			for (size_t idx = 0; idx < num_threads; idx++) {
+				item.start = idx * ents;
+				item.end = (idx + 1) * ents;
+				INSERT(item);
+			}
+		// Otherwise, just use one thread.
+		} else {
+			INSERT(item);
 		}
 	}
+
+	#undef INSERT
 }
 
 void ECS_ResolveCommandBuffers(ECS *ecs)
@@ -336,6 +351,39 @@ void ECS_ResolveCommandBuffers(ECS *ecs)
 	*/
 }
 
+// Distribute an update to a thread.
+void ECS_DispatchSystemUpdate(ECS *ecs, SystemQueueItem *item)
+{
+	if (item->type == SYSTEM_UPDATE_QUEUED) {
+		wait_until_ready(ecs, 1);
+		size_t thread_idx = 0;
+		// At least one thread is ready. Assert if this is false.
+		assert(ready_thread(ecs, &thread_idx));
+		distribute_to_thread(ecs, ecs->threads[thread_idx], item);
+	}
+	else if (item->type == SYSTEM_UPDATE_ONTHREAD) {
+		Entity *entity;
+		if (item->start == item->end && item->end == 0) {
+			Manager_UpdateSystem(ecs, item->system, 0);
+			return;
+		}
+
+		HA_RANGE_FOR(ecs->entities, entity, item->start, item->end) {
+			Manager_UpdateSystem(ecs, item->system, idx);
+		}
+	}
+}
+
+// Resolve a barrier
+void ECS_DispatchBarrier(ECS *ecs, SystemQueueItem *item)
+{
+	synchronize_threads(ecs);
+
+	if (ha_len(ecs->buffers) > 0) {
+		ECS_ResolveCommandBuffers(ecs);
+	}
+}
+
 /*
 	Each system (nominally) updates on one entity at a time, and then only on
 	certain components on those entities.
@@ -357,25 +405,41 @@ void ECS_ResolveCommandBuffers(ECS *ecs)
 	when updating entities, entity creation and deletion must be queued in a
 	command buffer until a synchronization point is reached in the update cycle.
 */
-bool ECS_UpdateSystems(ECS *ecs)
+void ECS_Update(ECS *ecs)
 {
-	HT_FOR(ecs->systems, 0) {
-		System *system = ht_get(ecs->systems, idx);
-		ECS_UpdateSystem(ecs, system);
+	// If it needs it, update the queue.
+	if (ecs->update_systems_dirty) {
+		ECS_ArrangeSystems(ecs);
+		ecs->update_systems_dirty = false;
+	}
 
-		// TODO: allow queuing multiple systems when necessary.
-		if (ecs->num_threads > 0) {
+	// Dispatch all updates and resolve barriers.
+	for (size_t idx = 0; idx < ecs->update_systems.size; idx++) {
+		SystemQueueItem *item = dyn_get(&ecs->update_systems, idx);
+
+		switch (item->type) {
+		case SYSTEM_UPDATE_BARRIER:
+			ECS_DispatchBarrier(ecs, item);
+			break;
+		case SYSTEM_UPDATE_ONTHREAD:
 			synchronize_threads(ecs);
-		}
-		if (ha_len(ecs->buffers) > 0) {
-			ECS_ResolveCommandBuffers(ecs);
+		case SYSTEM_UPDATE_QUEUED:
+			ECS_DispatchSystemUpdate(ecs, item);
+			break;
+		default:
+			break;
 		}
 	}
 
-	return true;
-}
+	// Dispatch events.
+	HT_FOR(ecs->systems, 0) {
+		System *system = ht_get(ecs->systems, idx);
+		DYN_FOR(*system->ev_queue, 0) {
+			Event *ev = EventQueue_Peek(system->ev_queue, idx);
+			Manager_SystemEvent(ecs, system, ev);
+		}
+		EventQueue_Clear(system->ev_queue);
+	}
 
-void ECS_UpdateEnd(ECS *ecs)
-{
-	(void) ecs;
+	synchronize_threads(ecs);
 }

@@ -153,9 +153,12 @@ bool Manager_RegisterSystem(ECS *ecs, System *info)
 	assert(ecs && ecs->systems && info);
 
 	info->ent_queue = ha_alloc(128, sizeof(hash_t));
-	if (!info->ent_queue) return false;
+    ERR_RET_ZERO(info->ent_queue, "Error creating system entity queue.\n");
 
 	System *_info = ht_insert(ecs->systems, hash_string(info->name), info);
+    // TODO: respect system dependencies and queue systems in the most optimal way.
+    dyn_insert(&ecs->system_order, ecs->system_order.size, &_info);
+    ecs->update_systems_dirty = true;
 
 	return _info ? true : false;
 }
@@ -170,6 +173,10 @@ System* Manager_GetSystem(ECS *ecs, const char *name)
 void Manager_UnregisterSystem(ECS *ecs, System *system)
 {
 	assert(ecs && ecs->systems && system);
+
+    int idx = dyn_find(&ecs->system_order, &system);
+    dyn_remove(&ecs->system_order, idx, false);
+    ecs->update_systems_dirty = true;
 
 	EventQueue_Free(system->ev_queue);
 	free((char *)system->name);
