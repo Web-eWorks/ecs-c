@@ -12,8 +12,6 @@ ECS* ECS_New()
 		256, 256,
 		// Systems and component types
 		32, 32,
-		// Number of components / entity
-		8,
 		// Number of entities systems will operate on.
 		256
 	};
@@ -22,41 +20,34 @@ ECS* ECS_New()
 
 ECS* ECS_CustomNew(const ECS_AllocInfo *alloc)
 {
+	// Properly free all memory if we can't create the ECS.
+	#define _ERR(cond) ERR(cond, ECS_Delete(ecs); return NULL, "Error creating ECS.\n")
+
 	assert(alloc);
 
 	ECS *ecs = malloc(sizeof(ECS));
 	if (!ecs) return NULL;
 
-	// Properly free all memory if we can't create the ECS.
-	bool ok = true;
+	_ERR(ecs->entities = ha_alloc(alloc->entities, sizeof(Entity)));
 
-	ecs->entities = ha_alloc(alloc->entities, sizeof(Entity));
-	ok = ok && ecs->entities;
+	_ERR(ecs->systems = ht_alloc(alloc->systems, sizeof(System)));
+	_ERR(dyn_alloc(&ecs->system_order, alloc->systems, sizeof(System *)));
+	_ERR(dyn_alloc(&ecs->update_systems, alloc->systems, sizeof(SystemQueueItem)));
 
-	ecs->systems = ht_alloc(alloc->systems, sizeof(System));
-	ok = ok && ecs->systems;
-	ok = ok && dyn_alloc(&ecs->system_order, alloc->systems, sizeof(System *));
-	ok = ok && dyn_alloc(&ecs->update_systems, alloc->systems, sizeof(SystemQueueItem));
+	_ERR(ecs->cm_types = ht_alloc(alloc->cm_types, sizeof(ComponentType)));
 
-	ecs->cm_types = ht_alloc(alloc->cm_types, sizeof(ComponentType));
 	ecs->alloc_info = *alloc;
-	ok = ok && ecs->cm_types;
-
 	ecs->num_threads = 0;
 	ecs->ready_threads = 0;
 	ecs->threads = NULL;
-	ecs->buffers = ha_alloc(4, sizeof(CommandBuffer));
-	ok = ok && ecs->buffers;
+	_ERR(ecs->buffers = ha_alloc(4, sizeof(CommandBuffer)));
 
-	ok = ok && pthread_mutex_init(&ecs->global_lock, NULL) == 0;
-	ok = ok && pthread_cond_init(&ecs->ready_cond, NULL) == 0;
+	_ERR(pthread_mutex_init(&ecs->global_lock, NULL) == 0);
+	_ERR(pthread_cond_init(&ecs->ready_cond, NULL) == 0);
 
 	ecs->is_updating = false;
 
-	if (!ok) {
-		ECS_Delete(ecs);
-		return NULL;
-	}
+	#undef _ERR
 
 	return ecs;
 }
@@ -65,7 +56,6 @@ bool ECS_SetThreads(ECS *ecs, size_t threads)
 {
 	assert(ecs && !ecs->is_updating);
 
-	// TODO: create and spawn threads.
 	int nthreads = threads - ecs->num_threads;
 	if (nthreads <= 0) {
 		ECS_UNLOCK(ecs);
@@ -113,7 +103,7 @@ void ECS_Delete(ECS *ecs)
 	}
 
 	if (ecs->systems) {
-		HT_FOR(ecs->systems, 0) {
+		HT_FOR(ecs->systems) {
 			System *system = ht_get(ecs->systems, idx);
 			if (system) Manager_UnregisterSystem(ecs, system);
 		}
@@ -124,7 +114,7 @@ void ECS_Delete(ECS *ecs)
 
 	// There are only a handful of component deletions to perform at this point.
 	if (ecs->cm_types) {
-		HT_FOR(ecs->cm_types, 0) {
+		HT_FOR(ecs->cm_types) {
 			ComponentType *type = ht_get(ecs->cm_types, idx);
 			if (type) {
 				ht_free(type->components);
@@ -260,20 +250,20 @@ static bool system_requires_barrier(ECS *ecs, System *system)
 
 /*
 	TODO: arrange systems in the most optimal way.
-	TODO: handle circular referencing in the systems.
 */
 void ECS_ArrangeSystems(ECS *ecs)
 {
 	bool is_thread_safe = true;
 
-	#define INSERT(t) dyn_insert(&ecs->update_systems, ecs->update_systems.size, &t);
+	#define INSERT(t) dyn_append(&ecs->update_systems, &t);
 
 	DYN_FOR(ecs->system_order, 0) {
 		System *system = *(System **)dyn_get(&ecs->system_order, idx);
 
 		SystemQueueItem item = {
 			SYSTEM_UPDATE_QUEUED,
-			0, ha_len(system->ent_queue),
+			ha_get(system->ent_queue, 0) ? 0 : ha_next(system->ent_queue, 0),
+			ha_last(system->ent_queue),
 			system
 		};
 
@@ -295,7 +285,7 @@ void ECS_ArrangeSystems(ECS *ecs)
 		is_thread_safe = false;
 
 		// If we have enough items, split them across multiple threads.
-		if (item.end > THREAD_MIN_LOAD) {
+		if (ecs->num_threads > 1 && ha_len(system->ent_queue) > THREAD_MIN_LOAD) {
 			// Ensure that we're splitting things up relatively evenly.
 			size_t num_threads = round((float)item.end / THREAD_MIN_LOAD);
 			if (num_threads > ecs->num_threads) num_threads = ecs->num_threads;
@@ -304,6 +294,8 @@ void ECS_ArrangeSystems(ECS *ecs)
 			size_t ents = item.end / num_threads;
 			for (size_t idx = 0; idx < num_threads; idx++) {
 				item.start = idx * ents;
+				if(!ha_get(system->ent_queue, item.start))
+					item.start = ha_next(system->ent_queue, item.start);
 				item.end = (idx + 1) * ents;
 				INSERT(item);
 			}
@@ -354,22 +346,22 @@ void ECS_ResolveCommandBuffers(ECS *ecs)
 // Distribute an update to a thread.
 void ECS_DispatchSystemUpdate(ECS *ecs, SystemQueueItem *item)
 {
-	if (item->type == SYSTEM_UPDATE_QUEUED) {
+	if (item->type == SYSTEM_UPDATE_QUEUED && ecs->num_threads > 0) {
 		wait_until_ready(ecs, 1);
 		size_t thread_idx = 0;
 		// At least one thread is ready. Assert if this is false.
 		assert(ready_thread(ecs, &thread_idx));
 		distribute_to_thread(ecs, ecs->threads[thread_idx], item);
 	}
-	else if (item->type == SYSTEM_UPDATE_ONTHREAD) {
+	else {
 		Entity *entity;
 		if (item->start == item->end && item->end == 0) {
 			Manager_UpdateSystem(ecs, item->system, 0);
 			return;
 		}
 
-		HA_RANGE_FOR(ecs->entities, entity, item->start, item->end) {
-			Manager_UpdateSystem(ecs, item->system, idx);
+		HA_RANGE_FOR(item->system->ent_queue, entity, item->start, item->end) {
+			Manager_UpdateSystem(ecs, item->system, *entity);
 		}
 	}
 }
@@ -432,7 +424,7 @@ void ECS_Update(ECS *ecs)
 	}
 
 	// Dispatch events.
-	HT_FOR(ecs->systems, 0) {
+	HT_FOR(ecs->systems) {
 		System *system = ht_get(ecs->systems, idx);
 		DYN_FOR(*system->ev_queue, 0) {
 			Event *ev = EventQueue_Peek(system->ev_queue, idx);

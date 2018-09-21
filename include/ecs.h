@@ -16,6 +16,23 @@
 #include "system.h"
 
 /*
+    The performance of the ECS is defined by the contiguous nature of its data
+    storage.
+
+    The default values provide a fairly good tradeoff between memory
+    fragmentation and consumption, but an application may wish to pass its own
+    values for these allocations.
+*/
+typedef struct {
+    size_t components;
+    size_t entities;
+    size_t systems;
+    size_t cm_types;
+
+    size_t system_entities;
+} ECS_AllocInfo;
+
+/*
 	Create and destroy an ECS.
 */
 ECS* ECS_New();

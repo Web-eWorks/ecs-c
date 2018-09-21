@@ -34,7 +34,7 @@ bool ECS_EntityExists(ECS *ecs, Entity entity)
 {
 	assert(ecs);
 
-	return ha_get(ecs->entities, entity) != NULL;
+	return ha_get(ecs->entities, entity);
 }
 
 const char* ECS_EntityToString(Entity entity)

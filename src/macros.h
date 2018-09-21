@@ -5,33 +5,23 @@
 
 #include <stdio.h>
 
-#define ERR_NO_RET(cond, ...) if (!cond) { \
+#define ERR(cond, action, ...) if (!(cond)) { \
     fprintf(stderr, __VA_ARGS__); \
+    action; \
 }
 
-#define ERR_OOM(cond, msg) if (!cond) { \
-    fprintf(stderr, "ERROR " msg ": Out of Memory.\n"); \
-    return NULL; \
-}
+#define ERR_NO_RET(cond, ...) ERR(cond, , __VA_ARGS__)
 
-#define ERR_CONTINUE(cond, ...) if (!cond) { \
-    fprintf(stderr, __VA_ARGS__); \
-    continue; \
-}
+#define ERR_OOM(cond, msg) ERR(cond, return NULL, "ERROR " msg ": Out of Memory.\n")
 
-#define ERR_RET_NULL(cond, ...) if (!cond) { \
-    fprintf(stderr, __VA_ARGS__); \
-    return NULL; \
-}
+#define ERR_CONTINUE(cond, ...) ERR(cond, continue, __VA_ARGS__)
 
-#define ERR_RET_ZERO(cond, ...) if (!cond) { \
-    fprintf(stderr, __VA_ARGS__); \
-    return 0; \
-}
+#define ERR_RET(cond, ...) ERR(cond, return, __VA_ARGS__)
 
-#define ERR_ABORT(cond, ...) if (!cond) {\
-    fprintf(stderr, __VA_ARGS__); \
-    abort(); \
-}
+#define ERR_RET_NULL(cond, ...) ERR(cond, return NULL, __VA_ARGS__)
+
+#define ERR_RET_ZERO(cond, ...) ERR(cond, return 0, __VA_ARGS__)
+
+#define ERR_ABORT(cond, ...) ERR(cond, abort(), __VA_ARGS__)
 
 #endif

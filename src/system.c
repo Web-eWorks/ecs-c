@@ -27,10 +27,12 @@ bool ECS_SystemRegister(ECS *ecs, const SystemRegistryInfo *reg, void *data)
         && !update_info->UpdatesOtherEntities
         && !update_info->CreatesOrDeletesEntities;
 
-    info.dependencies = NULL;
-    info.deps_size = 0;
+    // If we have dependencies, create a hash set to store them in.
     if (update_info->AfterSystems) {
-        info.deps_size = string_arr_to_type(&info.dependencies, update_info->AfterSystems);
+        info.dependencies = hs_alloc(16);
+        for (size_t idx = 0; update_info->AfterSystems[idx] != NULL; idx++) {
+            hs_set(info.dependencies, hash_string(update_info->AfterSystems[idx]));
+        }
     }
 
     info.ev_queue = EventQueue_New();

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "hasharray.h"
+#include "mempool.h"
 
 struct hasharray_t {
     size_t count;
@@ -137,6 +138,11 @@ hash_t ha_next_free(hasharray_t *ha, hash_t idx)
     // TODO: make this less O(N)? Maybe a balanced search of some sort?
     while(ha->capacity > ++idx && ha->entries[idx]) continue;
     return idx;
+}
+
+hash_t ha_last(hasharray_t *ha)
+{
+    return ha->last_filled;
 }
 
 void ha_delete(hasharray_t *ha, hash_t idx)

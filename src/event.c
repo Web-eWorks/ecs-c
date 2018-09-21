@@ -51,7 +51,7 @@ void EventQueue_Push(EventQueue *queue, Event *event)
 {
     assert(queue && queue->ptr && event);
 
-    dyn_insert(queue, queue->size, event);
+    dyn_append(queue, event);
 }
 
 void EventQueue_Clear(EventQueue *queue)

@@ -31,7 +31,7 @@ void CommandBuffer_Delete(CommandBuffer *buff)
 
 static inline void insert(CommandBuffer *buff, Command *cm)
 {
-    CB_ATOMIC(buff, dyn_insert(&buff->commands, buff->commands.size, cm));
+    CB_ATOMIC(buff, dyn_append(&buff->commands, cm));
 }
 
 hash_t CommandBuffer_CreateEntity(CommandBuffer *buff)

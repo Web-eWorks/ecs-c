@@ -89,8 +89,7 @@ struct System {
 	bool is_thread_safe;
 
 	EntityArchetype *archetype;
-	hash_t *dependencies;
-	size_t deps_size;
+	hashset_t *dependencies;
 
 	EventQueue *ev_queue;
 	hasharray_t *ent_queue;

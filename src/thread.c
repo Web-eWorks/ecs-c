@@ -73,7 +73,6 @@ void* UpdateThread_main(void *arg)
 {
     ThreadData *data = arg;
     data->running = UpdateThread_start(data);
-    hasharray_t *entities = data->ecs->entities;
 
     // Wait until there's a new system chunk to update.
     while (data->running) {
@@ -97,10 +96,10 @@ void* UpdateThread_main(void *arg)
         hash_t *hash;
         // Update the assigned chunk of the system.
         if (end == 0) HA_FOR(ha, hash, start) {
-            UpdateThread_update(data, system, idx);
+            UpdateThread_update(data, system, *hash);
         }
         else HA_RANGE_FOR(ha, hash, start, end) {
-            UpdateThread_update(data, system, idx);
+            UpdateThread_update(data, system, *hash);
         }
     }
 

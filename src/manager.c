@@ -117,8 +117,8 @@ Entity Manager_CreateEntity(ECS *ecs)
 {
 	assert(ecs);
 
-	hash_t entity;
-	(void) ha_insert_free(ecs->entities, &entity, NULL);
+    hash_t entity;
+    (void) ha_insert_free(ecs->entities, &entity, NULL);
 
 	return entity;
 }
@@ -131,19 +131,19 @@ void Manager_DeleteEntity(ECS *ecs, Entity entity)
 
 	// Because we don't keep state on the entity, we iterate through all
 	// possible components and delete the ones matching the entity.
-	HT_FOR(ecs->cm_types, 0) {
+	HT_FOR(ecs->cm_types) {
 		ComponentType *cm_type = ht_get(ecs->cm_types, idx);
 		if (ht_get(cm_type->components, entity))
 			Manager_DeleteComponent(ecs, cm_type, entity);
 	}
 
 	// Remove the entity from system queues.
-	HT_FOR(ecs->systems, 0) {
+	HT_FOR(ecs->systems) {
 		System *system = ht_get(ecs->systems, idx);
 		ha_delete(system->ent_queue, entity);
 	}
 
-	ha_delete(ecs->entities, entity);
+    ha_delete(ecs->entities, entity);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -156,8 +156,23 @@ bool Manager_RegisterSystem(ECS *ecs, System *info)
     ERR_RET_ZERO(info->ent_queue, "Error creating system entity queue.\n");
 
 	System *_info = ht_insert(ecs->systems, hash_string(info->name), info);
-    // TODO: respect system dependencies and queue systems in the most optimal way.
-    dyn_insert(&ecs->system_order, ecs->system_order.size, &_info);
+
+    // Circular references in the dependencies cause undefined behavior
+    // TODO: this is a simplistic implementation that does not handle
+    // dependencies very well. Improve this.
+    size_t first_insert = 0;
+    size_t last_insert = ecs->system_order.size;
+    for (size_t idx = 0; idx < ecs->system_order.size; idx++) {
+        System *system = (System *)dyn_get(&ecs->system_order, idx);
+        if (system->dependencies && hs_get(system->dependencies, info->name_hash))
+            if (idx < last_insert) last_insert = idx;
+        if (info->dependencies && hs_get(info->dependencies, system->name_hash))
+            first_insert = idx;
+    }
+
+    size_t insert = first_insert > last_insert ? first_insert : last_insert;
+    dyn_insert(&ecs->system_order, insert, &_info);
+
     ecs->update_systems_dirty = true;
 
 	return _info ? true : false;
@@ -185,9 +200,14 @@ void Manager_UnregisterSystem(ECS *ecs, System *system)
 	ht_delete(ecs->systems, system->name_hash);
 }
 
+void Manager_ArrangeSystems(ECS *ecs)
+{
+
+}
+
 void Manager_UpdateCollections(ECS *ecs, Entity entity)
 {
-	HT_FOR(ecs->systems, 0) {
+	HT_FOR(ecs->systems) {
 		System *system = ht_get(ecs->systems, idx);
 		if (Manager_ShouldSystemQueueEntity(ecs, system, entity)) {
 			ha_insert_free(system->ent_queue, NULL, &entity);

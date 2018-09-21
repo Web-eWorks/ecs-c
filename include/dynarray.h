@@ -25,17 +25,21 @@ bool dyn_alloc(dynarray_t *arr, size_t size, size_t entry_size);
 void dyn_free(dynarray_t *arr);
 
 /*
-	Insert a new item into the array.
-	If idx is negative, defaults to the last index + 1. If idx is greater than
-	the index of the last item in the array, it will extend the array,
-	potentially creating holes.
+	Add a new item to the end of the array.
+*/
+void* dyn_append(dynarray_t *arr, void *data);
 
-	To append to an array, use this code:
+/*
+	Insert a new item into the array, moving existing items out of the way.
+	If idx is negative, the item is inserted at arr->size - idx. If idx is
+	greater than the index of the last item in the array, it will extend the
+	array, potentially creating holes.
 
-		dyn_insert(arr, arr->size, data);
+	To append to an array, use:
+		dyn_append(arr, data);
 
-	If idx is already occupied, this function will overwrite the data stored
-	at that index.
+	If idx is already occupied, this function will increase the size of the array
+	and shuffle the entry and all following entries towards the end by one index.
 
 	If data is NULL, clears the allocated memory with zeros.
 */

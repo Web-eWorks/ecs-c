@@ -1,5 +1,6 @@
 
 #include "dynarray.h"
+#include "macros.h"
 
 #include <assert.h>
 #include <string.h>
@@ -35,11 +36,15 @@ void* dyn_insert(dynarray_t *arr, int idx, void *data)
 	assert(arr && arr->ptr);
 
 	const size_t r_idx = GET_RIDX(arr->size, idx);
-	if (r_idx >= arr->capacity) {
-		if (!dyn_resize(arr, r_idx + 1)) return NULL;
-	}
+	ERR_RET_NULL(dyn_resize(arr, (r_idx < arr->size ? arr->size : r_idx) + 1), "Error resizing dynamic array.");
 
 	void *ptr = arr->ptr + arr->entry_size * r_idx;
+
+	if (r_idx < arr->size) {
+		arr->size++;
+		for (size_t idx = r_idx + 1; idx < arr->size; idx++)
+			dyn_swap(arr, idx - 1, idx);
+	}
 
 	if (data == NULL) memset(ptr, 0, arr->entry_size);
 	else memcpy(ptr, data, arr->entry_size);
@@ -47,6 +52,19 @@ void* dyn_insert(dynarray_t *arr, int idx, void *data)
 	if (r_idx >= arr->size) {
 		arr->size = r_idx + 1;
 	}
+
+	return ptr;
+}
+
+void* dyn_append(dynarray_t *arr, void *data)
+{
+	assert(arr && arr->ptr);
+
+	ERR_RET_NULL(dyn_resize(arr, arr->size + 1), "Error resizing dynamic array.");
+
+	void *ptr = arr->ptr + arr->entry_size * arr->size++;
+	if (data == NULL) memset(ptr, 0, arr->entry_size);
+	else memcpy(ptr, data, arr->entry_size);
 
 	return ptr;
 }
@@ -101,7 +119,7 @@ void dyn_remove(dynarray_t *arr, int idx, bool just_swap)
 			dyn_swap(arr, r_idx-1, idx);
 		}
 	}
-	
+
 	dyn_delete(arr, -1);
 }
 

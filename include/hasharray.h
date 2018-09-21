@@ -62,6 +62,11 @@ hash_t ha_first_free(hasharray_t *ha);
 hash_t ha_next_free(hasharray_t *ha, hash_t idx);
 
 /*
+    Get the index of the last filled slot in the array.
+*/
+hash_t ha_last(hasharray_t *ha);
+
+/*
     Delete an element in the array.
 */
 void ha_delete(hasharray_t *ha, hash_t idx);
